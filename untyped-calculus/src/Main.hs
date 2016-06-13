@@ -1,13 +1,12 @@
 import System.Environment
-import Control.Monad.Except
 import Syntax
 import Parser
 
--- Should be an instance of Show instead...
+-- pretty print a term
 showTerm :: Context -> Term -> String
 showTerm ctx (TmVar info x n) =
     if length ctx == n
-    then indexToName info ctx x
+    then indexToName ctx x
     else "bad index"
 showTerm ctx (TmAbs info str t1) =
     "(lambda " ++ str' ++ "." ++ (showTerm ctx' t1) ++ ")"
@@ -15,8 +14,14 @@ showTerm ctx (TmAbs info str t1) =
 showTerm ctx (TmApp info t1 t2) =
     "(" ++ (showTerm ctx t1) ++ " " ++ (showTerm ctx t2) ++ ")"
 
-indexToName info ctx x = undefined
-pickFreshName ctx x = undefined
+indexToName :: Context -> Int -> String
+indexToName ctx idx = fst $ ctx !! idx
+
+pickFreshName :: Context -> String -> (Context, String)
+pickFreshName ctx name =
+    if name `elem` (map fst ctx)
+    then pickFreshName ctx $ name ++ "'"
+    else ((name, NameBind) : ctx, name)
 
 shiftTerm :: Int -> Term -> Term
 shiftTerm d t = walk 0 t
@@ -33,10 +38,6 @@ substTerm idx toSub term = walk 0 term
 substTermTop :: Term -> Term -> Term
 substTermTop s t = shiftTerm (-1) $ substTerm 0 (shiftTerm 1 s) t
 
-isVal :: Context -> Term -> Bool
-isVal ctx (TmAbs _ _ _) = True
-isVal ctx _ = False
-
 eval :: Context -> Term -> Maybe Term
 eval ctx (TmApp info (TmAbs _ x t12) v2@(TmAbs _ _ _)) = Just $ substTermTop v2 t12
 eval ctx (TmApp info v1@(TmAbs _ _ _) t2) = do 
@@ -52,55 +53,16 @@ runEval ctx t = case (eval ctx t) of
     Nothing -> t
     Just next -> runEval ctx next
 
+process :: String -> IO ()
+process inp = 
+    -- Don't know how to deal with newlines properly in parsec, annoying
+    putStrLn $ case parseLC $ filter (/= '\n') inp of 
+        Left err -> show err
+        Right parsed -> showTerm [] $ runEval [] parsed
+
 main :: IO ()
 main = do
     filePath <- fmap head getArgs
     inp <- readFile filePath
     putStrLn inp
     process inp
-
-process :: String -> IO ()
-process inp = 
-    putStrLn $ case parseLC $ filter (/= '\n') inp of -- Don't know how to deal with this in parsec
-        Left err -> show err
-        Right parsed -> show $ eval [] parsed
-
---eval :: Exp -> Exp 
---eval (EIf ETrue e2 e3) = eval e2
---eval (EIf EFalse e2 e3) = eval e3
---eval (EIf t1 t2 t3) = let t1' = eval t1 in eval $ EIf t1' t2 t3
---eval (ESucc t1) = ESucc $ eval t1
---eval (ESucc EZero) = EZero
---eval (EPred EZero) = EZero
---eval (EPred (ESucc nv)) = nv
---eval (EPred t1) = let t1' = eval t1 in eval $ EPred t1'
---eval (EIsZero EZero) = eval $ ETrue
---eval (EIsZero (ESucc nv)) = EFalse
---eval (EIsZero t1) = EIsZero $ eval t1
---eval EZero = EZero
---eval ETrue = ETrue
---eval EFalse = EFalse
---
---typeOf :: Exp -> Either String Type
---typeOf ETrue = Right TyBool
---typeOf EFalse = Right TyBool
---typeOf (EIf t1 t2 t3) = case (typeOf t1) of
---    Right TyBool -> if (ty2 == ty3) then ty2 else Left "Expressions don't match"
---        where ty2 = typeOf t2
---              ty3 = typeOf t3
---    Right _ -> Left $ (show t1) ++ " is not a boolean"
---    err -> err
---typeOf EZero = Right TyInt
---typeOf (ESucc t1) = checkInt t1
---typeOf (EPred t1) = checkInt t1
---typeOf (EIsZero t1) = case (typeOf t1) of
---    Right TyInt -> Right TyBool
---    Right _ -> Left $ (show t1) ++ " is not a number"
---    err -> err
---
---checkInt :: Exp -> Either String Type
---checkInt e = case (typeOf e) of
---    (Right TyInt) -> Right TyInt
---    (Right _) -> Left $ (show e) ++ "is not a number"
---    err -> err
---

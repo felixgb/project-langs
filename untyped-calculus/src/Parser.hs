@@ -6,8 +6,6 @@ import Data.List (elemIndex)
 
 import Syntax
 
--- Inspired by http://mattwetmore.me/posts/parsing-combinators-with-parser-combinators.html
-
 type LCParser = Parsec String Context Term
 
 -- Get the line and column info from Parsec's SourcePos
