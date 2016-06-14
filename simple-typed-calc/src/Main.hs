@@ -31,46 +31,59 @@ shiftTerm d t = walk 0 t
     where walk c (TmVar info x n) = if x >= c then TmVar info (x + d) (n + d) else TmVar info x (n + d)
           walk c (TmAbs info x t1) = TmAbs info x $ walk (c + 1) t1
           walk c (TmApp info t1 t2) = TmApp info (walk c t1) (walk c t2)
+          -- Should be explicit about what goes next, this could totally be a 
+          -- source of weird bugs
+          walk c n = n
 
 substTerm :: Int -> Term -> Term -> Term
 substTerm idx toSub term = walk 0 term
     where walk c (TmVar info x n) = if x == idx + c then shiftTerm c toSub else TmVar info x n
           walk c (TmAbs info x t1) = TmAbs info x $ walk (c + 1) t1
           walk c (TmApp info t1 t2) = TmApp info (walk c t1) (walk c t2)
+          walk c n = n
 
 substTermTop :: Term -> Term -> Term
 substTermTop s t = shiftTerm (-1) $ substTerm 0 (shiftTerm 1 s) t
 
-eval :: Context -> Term -> Maybe Term
-eval ctx (TmApp info (TmAbs _ x t12) v2@(TmAbs _ _ _)) = Just $ substTermTop v2 t12
-eval ctx (TmApp info v1@(TmAbs _ _ _) t2) = do 
-    t2' <- eval ctx t2
-    return $ TmApp info v1 t2'
-eval ctx (TmApp info t1 t2) = do
-    t1' <- eval ctx t1
-    return $ TmApp info t1' t2
-eval ctx (TmIf _ (TmTrue _) t1 _) = Just t1
-eval ctx (TmIf _ (TmFalse _) _ t2) = Just t2
-eval ctx (TmIf info cond t1 t2) = do
-    cond' <- eval ctx cond
-    return $ TmIf info cond' t1 t1
-eval ctx (TmBinOp info op t1@(TmInt _ n1) t2@(TmInt _ n2)) = Just $ TmInt dummyInfo (getOp op n1 n2)
-eval _ _ = Nothing
+isVal :: Context -> Term -> Bool
+isVal ctx (TmTrue _) = True
+isVal ctx (TmFalse _) = True
+isVal ctx (TmInt _ _) = True
+isVal ctx (TmAbs _ _ _) = True
+isVal ctx (TmVar _ _ _) = True
+isVal _ _ = False
+
+isNumerical :: Term -> Bool
+isNumerical (TmInt _ _) = True
+isNumerical _ = False
+
+eval' :: Context -> Term -> Term
+eval' ctx (TmIf info cond t1 t2) = case eval' ctx cond of
+    (TmTrue _) -> eval' ctx t1
+    (TmFalse _) -> eval' ctx t2
+
+eval' ctx t1@(TmApp info (TmAbs _ x t12) v2)
+    | isVal ctx v2 = eval' ctx $ substTermTop v2 t12
+eval' ctx (TmApp info v1 t2)
+    | isVal ctx v1 = eval' ctx $ TmApp info v1 (eval' ctx t2)
+eval' ctx (TmApp info t1 t2) = eval' ctx $ TmApp info (eval' ctx t1) t2
+
+eval' ctx (TmBinOp info op (TmInt _ n1) (TmInt _ n2)) = TmInt dummyInfo $ getOp op n1 n2
+eval' ctx (TmBinOp info op t1 t2) = TmBinOp dummyInfo op (eval' ctx t1) (eval' ctx t2)
+
+eval' ctx term = term
+
 getOp :: Op -> (Int -> Int -> Int)
 getOp Plus = (+)
 getOp Times = (*)
-
-runEval :: Context -> Term -> Term
-runEval ctx t = case (eval ctx t) of
-    Nothing -> t
-    Just next -> runEval ctx next
 
 process :: String -> IO ()
 process inp = 
     -- Don't know how to deal with newlines properly in parsec, annoying
     putStrLn $ case parseLC $ filter (/= '\n') inp of 
         Left err -> show err
-        Right parsed -> showTerm [] $ runEval [] parsed
+        --Right parsed -> showTerm [] $ eval' [] parsed
+        Right parsed -> show $ eval' [] parsed
 
 main :: IO ()
 main = do

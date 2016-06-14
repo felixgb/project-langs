@@ -13,14 +13,14 @@ data Term
     | TmIf Info Term Term Term
     | TmBinOp Info Op Term Term 
     | TmInt Info Int
-    --deriving (Show)
-
-instance Show Term where
-    show (TmInt info n) = show n
-    show (TmTrue info) = "true"
-    show (TmFalse info) = "false"
-    show (TmIf info cond t1 t2) = "if..."
-    show (TmBinOp info op t1 t2) = (show t1) ++ (show op) ++ (show t2)
+    deriving (Show)
+--
+--instance Show Term where
+--    show (TmInt info n) = show n
+--    show (TmTrue info) = "true"
+--    show (TmFalse info) = "false"
+--    show (TmIf info cond t1 t2) = "if..."
+--    show (TmBinOp info op t1 t2) = (show t1) ++ (show op) ++ (show t2)
 
 data Op
     = Times

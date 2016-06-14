@@ -47,7 +47,7 @@ reserved = Tok.reserved lexer
 reservedOp = Tok.reservedOp lexer
 
 opers :: LCParser
-opers = Ex.buildExpressionParser table parseTerm
+opers = Ex.buildExpressionParser table parseTerm'
 
 -- Get the line and column info from Parsec's SourcePos
 infoFrom :: SourcePos -> Info
@@ -87,7 +87,7 @@ parseAbs termParser = do
     v <- parseVarName
     modifyState ((v, NameBind) :)   -- Prepend variable name onto context
     char '.'
-    term <- parseTerm
+    term <- parseTerm'
     modifyState tail    -- Leaving scope of the abstraction, pop variable off context
     pos <- getPosition
     return $ TmAbs (infoFrom pos) v term
@@ -110,27 +110,35 @@ parseIfThenElse :: LCParser
 parseIfThenElse = do
     pos <- getPosition
     reserved "if"
-    guard <- parseTerm
+    guard <- parseTerm'
     reserved "then"
-    e1 <- parseTerm
+    e1 <- parseTerm'
     reserved "else"
-    e2 <- parseTerm
+    e2 <- parseTerm'
     return $ TmIf (infoFrom pos) guard e1 e2
 
 parseNonApp :: LCParser
-parseNonApp = parens parseTerm
-    <|> parseBool
+parseNonApp = parseBool
     <|> parseInt
     <|> parseIfThenElse
-    <|> parseAbs parseTerm
+    <|> parens parseTerm'
+    <|> parseAbs parseTerm'
     <|> parseVar
 
-parseTerm :: LCParser
-parseTerm = chainl1 parseNonApp $ do
-    space
+parseTerm' :: LCParser
+parseTerm' = do
+    many space
+    terms <- many1 parseNonApp
+    many space
     pos <- getPosition
-    return $ TmApp (infoFrom pos)
-
+    return $ foldr1 (TmApp (infoFrom pos)) terms
+--
+--parseTerm :: LCParser
+--parseTerm = chainl1 parseNonApp $ do
+--    space
+--    pos <- getPosition
+--    return $ TmApp (infoFrom pos)
+--
 parseLC :: String -> Either ParseError Term
 parseLC = parseWith opers
 --parseLC = parseWith parseTerm
