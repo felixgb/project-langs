@@ -28,7 +28,7 @@ parens = Tok.parens lexer
 
 ident = Tok.identifier lexer
 
-type LCParser = Parsec String Context Term
+type LCParser = Parsec String () Term
 
 infoFrom :: SourcePos -> Info
 infoFrom pos = Info (sourceLine pos) (sourceColumn pos)
@@ -43,9 +43,6 @@ binary s f assoc = Ex.Infix (opInfo s f) assoc
 table = [[binary "*" Times Ex.AssocLeft]
         ,[binary "+" Plus Ex.AssocLeft]]
 
-parseWith :: Parsec String [u] a -> String -> Either ParseError a
-parseWith p = runParser p [] "untyped..."
-
 parseBinExp :: LCParser
 parseBinExp = Ex.buildExpressionParser table factor
 
@@ -55,18 +52,21 @@ parseInt = do
     n <- Tok.integer lexer
     return $ TmInt (infoFrom pos) (fromIntegral n)
 
+--parseType :: LCParser
+parseType = 
+    (reserved "Int" >> return TyInt) <|>
+    (reserved "Bool" >> return TyBool)
+
 parseAbs :: LCParser
 parseAbs = do
     reservedOp "\\"
     v <- ident
-    -- Prepend var onto content, is bound
-    modifyState ((v, NameBind) :)
+    reservedOp ":"
+    ty <- parseType
     reservedOp "->"
     term <- parseBinExp
-    -- Leaving the scope of the abstraction, pop var off content
-    modifyState tail
     pos <- getPosition
-    return $ TmAbs (infoFrom pos) v term
+    return $ TmAbs (infoFrom pos) v ty term
 
 parseIf :: LCParser
 parseIf = do
@@ -82,16 +82,16 @@ parseIf = do
 parseVar :: LCParser
 parseVar = do
     v <- ident
-    ctx <- getState
-    findVar v ctx
-
-findVar :: String -> Context -> LCParser
-findVar v ctx = case elemIndex (v, NameBind) ctx of
-    Nothing -> fail $ "Can't find varible " ++ v
-    Just n -> do
-        pos <- getPosition
-        return $ TmVar (infoFrom pos) n (length ctx)
-
+    pos <- getPosition
+    return $ TmVar (infoFrom pos) v
+--
+--findVar :: String -> Context -> LCParser
+--findVar v ctx = case elemIndex (v, NameBind) ctx of
+--    Nothing -> fail $ "Can't find varible " ++ v
+--    Just n -> do
+--        pos <- getPosition
+--        return $ TmVar (infoFrom pos) n (length ctx)
+--
 -- Find a better way to parse boolean constants in parsec?
 
 parseTrue :: LCParser
@@ -114,6 +114,7 @@ factor = try parseInt
 parseExps = do
     es <- many1 parseBinExp
     pos <- getPosition
+    -- error here
     return $ foldl1 (TmApp $ infoFrom pos) es
 
 contents p = do
@@ -122,7 +123,7 @@ contents p = do
     eof
     return r
 
-parseExp s = runParser (contents parseExps) [] "untyped" s
+parseExp s = runParser (contents parseExps) () "untyped" s
 
 --runCtxParse p sn inp ctx = runIdentity $ runStateT
 

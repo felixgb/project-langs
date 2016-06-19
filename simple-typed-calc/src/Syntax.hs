@@ -1,15 +1,8 @@
 module Syntax where
 
-data Binding
-    = NameBind 
-    | TmAbbBind Term
-    deriving (Show, Eq)
-
 data Term
-    -- First int is the de bruijn index of the variable, second is how many
-    -- abstractions are stored in the scope of the variable
-    = TmVar Info Int Int
-    | TmAbs Info String Term
+    = TmVar Info String
+    | TmAbs Info String Type Term
     | TmApp Info Term Term
     | TmTrue Info
     | TmFalse Info
@@ -36,11 +29,11 @@ instance Show Op where
 
 data Type
     = TyBool
+    | TyInt
     | TyArrow Type Type
+    deriving (Show, Eq)
 
 data Info 
     = Info Int Int
     | DummyInfo
     deriving (Show, Eq)
-
-type Context = [(String, Binding)]
