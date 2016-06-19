@@ -1,6 +1,9 @@
 module Syntax where
 
-data Binding = NameBind deriving (Show, Eq)
+data Binding
+    = NameBind 
+    | TmAbbBind Term
+    deriving (Show, Eq)
 
 data Term
     -- First int is the de bruijn index of the variable, second is how many
@@ -13,7 +16,7 @@ data Term
     | TmIf Info Term Term Term
     | TmBinOp Info Op Term Term 
     | TmInt Info Int
-    deriving (Show)
+    deriving (Show, Eq)
 --
 --instance Show Term where
 --    show (TmInt info n) = show n
@@ -25,6 +28,7 @@ data Term
 data Op
     = Times
     | Plus
+    deriving (Eq)
 
 instance Show Op where
     show Times = " * "
@@ -34,6 +38,9 @@ data Type
     = TyBool
     | TyArrow Type Type
 
-data Info = Info Int Int deriving (Show)
+data Info 
+    = Info Int Int
+    | DummyInfo
+    deriving (Show, Eq)
 
 type Context = [(String, Binding)]

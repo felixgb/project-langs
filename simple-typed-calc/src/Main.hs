@@ -44,6 +44,12 @@ substTerm idx toSub term = walk 0 term
 
 substTermTop :: Term -> Term -> Term
 substTermTop s t = shiftTerm (-1) $ substTerm 0 (shiftTerm 1 s) t
+ 
+getBinding info ctx idx = bindingShift (idx + 1) bind
+    where (_, bind) = ctx !! idx
+
+bindingShift i (TmAbbBind t) = TmAbbBind (shiftTerm i t)
+bindingShift i b = b
 
 isVal :: Context -> Term -> Bool
 isVal ctx (TmTrue _) = True
@@ -51,6 +57,7 @@ isVal ctx (TmFalse _) = True
 isVal ctx (TmInt _ _) = True
 isVal ctx (TmAbs _ _ _) = True
 isVal ctx (TmVar _ _ _) = True
+isVal ctx (TmBinOp _ _ _ _) = True
 isVal _ _ = False
 
 isNumerical :: Term -> Bool
@@ -68,8 +75,11 @@ eval' ctx (TmApp info v1 t2)
     | isVal ctx v1 = eval' ctx $ TmApp info v1 (eval' ctx t2)
 eval' ctx (TmApp info t1 t2) = eval' ctx $ TmApp info (eval' ctx t1) t2
 
+eval' ctx (TmVar info idx _) = case getBinding info ctx idx of
+    (TmAbbBind t) -> eval' ctx t
+
 eval' ctx (TmBinOp info op (TmInt _ n1) (TmInt _ n2)) = TmInt dummyInfo $ getOp op n1 n2
-eval' ctx (TmBinOp info op t1 t2) = TmBinOp dummyInfo op (eval' ctx t1) (eval' ctx t2)
+eval' ctx (TmBinOp info op t1 t2) = eval' ctx $ TmBinOp dummyInfo op (eval' ctx t1) (eval' ctx t2)
 
 eval' ctx term = term
 
@@ -80,10 +90,10 @@ getOp Times = (*)
 process :: String -> IO ()
 process inp = 
     -- Don't know how to deal with newlines properly in parsec, annoying
-    putStrLn $ case parseLC $ filter (/= '\n') inp of 
+    putStrLn $ case parseExp inp of 
         Left err -> show err
         --Right parsed -> showTerm [] $ eval' [] parsed
-        Right parsed -> show $ eval' [] parsed
+        Right parsed -> show $ eval' [("x", (TmAbbBind (TmInt DummyInfo 55)))] parsed
 
 main :: IO ()
 main = do
