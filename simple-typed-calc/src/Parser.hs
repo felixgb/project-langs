@@ -1,4 +1,6 @@
-module Parser where
+module Parser (
+    parseExp
+) where
 
 import Text.Parsec
 import Text.Parsec.String (Parser)
@@ -43,8 +45,8 @@ binary s f assoc = Ex.Infix (opInfo s f) assoc
 table = [[binary "*" Times Ex.AssocLeft]
         ,[binary "+" Plus Ex.AssocLeft]]
 
-parseBinExp :: LCParser
-parseBinExp = Ex.buildExpressionParser table factor
+term :: LCParser
+term = Ex.buildExpressionParser table factor'
 
 parseInt :: LCParser
 parseInt = do
@@ -64,18 +66,18 @@ parseAbs = do
     reservedOp ":"
     ty <- parseType
     reservedOp "->"
-    term <- parseBinExp
+    term <- parseExps
     pos <- getPosition
     return $ TmAbs (infoFrom pos) v ty term
 
 parseIf :: LCParser
 parseIf = do
     reserved "if"
-    cond <- parseBinExp
+    cond <- factor'
     reserved "then"
-    t1 <- parseBinExp
+    t1 <- factor'
     reserved "else"
-    t2 <- parseBinExp
+    t2 <- factor'
     pos <- getPosition
     return $ TmIf (infoFrom pos) cond t1 t2
 
@@ -84,15 +86,6 @@ parseVar = do
     v <- ident
     pos <- getPosition
     return $ TmVar (infoFrom pos) v
---
---findVar :: String -> Context -> LCParser
---findVar v ctx = case elemIndex (v, NameBind) ctx of
---    Nothing -> fail $ "Can't find varible " ++ v
---    Just n -> do
---        pos <- getPosition
---        return $ TmVar (infoFrom pos) n (length ctx)
---
--- Find a better way to parse boolean constants in parsec?
 
 parseTrue :: LCParser
 parseTrue = reserved "true" >> getPosition >>= \pos -> return $ TmTrue (infoFrom pos)
@@ -102,19 +95,17 @@ parseFalse = reserved "false" >> getPosition >>= \pos -> return $ TmFalse (infoF
 
 parseBool = parseTrue <|> parseFalse
 
-factor :: LCParser
-factor = try parseInt
-    <|> try parseIf
-    <|> try parseBool
-    <|> try parseVar
-    <|> try parseAbs
-    <|> parens parseBinExp
-    <|> parens parseExps
+factor' :: LCParser
+factor' = parens parseExps
+    <|> parseBool
+    <|> parseInt
+    <|> parseIf
+    <|> parseAbs
+    <|> parseVar
 
 parseExps = do
-    es <- many1 parseBinExp
+    es <- many1 term
     pos <- getPosition
-    -- error here
     return $ foldl1 (TmApp $ infoFrom pos) es
 
 contents p = do
@@ -124,6 +115,3 @@ contents p = do
     return r
 
 parseExp s = runParser (contents parseExps) () "untyped" s
-
---runCtxParse p sn inp ctx = runIdentity $ runStateT
-

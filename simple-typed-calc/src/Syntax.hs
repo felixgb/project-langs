@@ -9,6 +9,7 @@ data Term
     | TmIf Info Term Term Term
     | TmBinOp Info Op Term Term 
     | TmInt Info Int
+    | TmUnit Info
     deriving (Show, Eq)
 --
 --instance Show Term where
@@ -30,6 +31,7 @@ instance Show Op where
 data Type
     = TyBool
     | TyInt
+    | TyUnit
     | TyArrow Type Type
     deriving (Show, Eq)
 
