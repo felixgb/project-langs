@@ -94,7 +94,21 @@ parseTag = do
 
 parseCase :: LCParser
 parseCase = do
+    pos <- getPosition
     reserved "case"
+    t1 <- factor'
+    reserved "of"
+    cases <- sepBy1 caseAssocs $ reservedOp "|"
+    return $ TmCase (infoFrom pos) t1 cases
+    where caseAssocs = do
+            reservedOp "<"
+            l <- ident
+            reservedOp "="
+            x <- ident
+            reservedOp ">"
+            reservedOp "->"
+            t <- factor'
+            return $ (l, (x, t))
 
 parseIf :: LCParser
 parseIf = do
@@ -125,6 +139,8 @@ factor' :: LCParser
 factor' = parens parseExps
     <|> parseBool
     <|> parseInt
+    <|> parseCase
+    <|> parseTag
     <|> parseIf
     <|> parseAbs
     <|> parseVar

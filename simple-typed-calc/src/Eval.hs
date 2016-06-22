@@ -7,6 +7,7 @@ import Syntax
 import Parser
 
 import qualified Data.Map as Map
+import Data.List
 
 data Value
     = VInt Int
@@ -40,6 +41,12 @@ eval env (TmBinOp info op t1 t2) = do
     VInt n1 <- eval env t1
     VInt n2 <- eval env t2
     return $ getBinOp op n1 n2
+eval env (TmCase info (TmTag _ name t1 _) branches) = do
+    (VClosure x body closure) <- eval env t1
+    case lookup name branches of
+        Nothing -> error "can't find case var"
+        --Just (y, bod) -> 
+    return $ undefined
 eval env err = error $ show err
 
 getBinOp :: Op -> Int -> Int -> Value
