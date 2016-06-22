@@ -35,7 +35,6 @@ type LCParser = Parsec String () Term
 infoFrom :: SourcePos -> Info
 infoFrom pos = Info (sourceLine pos) (sourceColumn pos)
 
---binary s f assoc = Ex.Infix (reservedOp s >> return (BinOp f)) assoc
 binary s f assoc = Ex.Infix (opInfo s f) assoc
     where opInfo name op = do
             reservedOp name
@@ -55,9 +54,9 @@ parseInt = do
     return $ TmInt (infoFrom pos) (fromIntegral n)
 
 --parseType :: LCParser
-parseType = 
-    (reserved "Int" >> return TyInt) <|>
-    (reserved "Bool" >> return TyBool)
+parseType = (reserved "Int" >> return TyInt) 
+    <|> (reserved "Bool" >> return TyBool) 
+    <|> parseVariant
 
 parseAbs :: LCParser
 parseAbs = do
@@ -69,6 +68,33 @@ parseAbs = do
     term <- parseExps
     pos <- getPosition
     return $ TmAbs (infoFrom pos) v ty term
+
+parseVariant = do
+    reservedOp "<"
+    vts <- sepBy1 assoc $ reservedOp ","
+    reservedOp ">"
+    return $ TyVariant vts
+    where assoc = do
+            l <- ident
+            reservedOp ":"
+            ty <- parseType
+            return (l, ty)
+
+parseTag :: LCParser
+parseTag = do
+    reservedOp "<"
+    l <- ident
+    reservedOp "="
+    t <- factor'
+    reservedOp ">"
+    reserved "as"
+    ty <- parseType
+    pos <- getPosition
+    return $ TmTag (infoFrom pos) l t ty
+
+parseCase :: LCParser
+parseCase = do
+    reserved "case"
 
 parseIf :: LCParser
 parseIf = do

@@ -10,6 +10,8 @@ data Term
     | TmBinOp Info Op Term Term 
     | TmInt Info Int
     | TmUnit Info
+    | TmCase Info Term [(String, (String, Term))]
+    | TmTag Info String Term Type
     deriving (Show, Eq)
 --
 --instance Show Term where
@@ -32,6 +34,7 @@ data Type
     = TyBool
     | TyInt
     | TyUnit
+    | TyVariant [(String, Type)]
     | TyArrow Type Type
     deriving (Show, Eq)
 
