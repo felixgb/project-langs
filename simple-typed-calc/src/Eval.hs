@@ -30,7 +30,7 @@ eval env (TmFalse _) = Right $ VBool False
 eval env (TmInt _ n) = Right $ VInt n
 eval env (TmVar _ name) = case Map.lookup name env of
     Just v -> Right v
-    Nothing -> Left $ "Can't find var: " ++ name
+    Nothing -> Left $ "Can't find var: " ++ name ++ "env: " ++ (show env)
 eval env (TmAbs info name _ body) = return $ VClosure name body env
 eval env (TmApp info t1 t2) = do
     (VClosure x body closure) <- eval env t1
@@ -42,11 +42,10 @@ eval env (TmBinOp info op t1 t2) = do
     VInt n2 <- eval env t2
     return $ getBinOp op n1 n2
 eval env (TmCase info (TmTag _ name t1 _) branches) = do
-    (VClosure x body closure) <- eval env t1
-    case lookup name branches of
-        Nothing -> error "can't find case var"
-        --Just (y, bod) -> 
-    return $ undefined
+    let Just (x, t2) = lookup name branches
+    t1' <- eval env t1
+    let env' = Map.insert x t1' env
+    eval env' t2
 eval env err = error $ show err
 
 getBinOp :: Op -> Int -> Int -> Value

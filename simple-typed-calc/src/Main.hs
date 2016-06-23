@@ -19,6 +19,10 @@ process inp = do
     checked <- checkType parsed 
     return $ runEval parsed
 
+parseAndEval inp = do
+    parsed <- parsecErrToString inp
+    return $ runEval parsed
+
 parsecErrToString inp = case parseExp inp of
     Right ast -> Right ast
     Left parsecErr -> Left $ show parsecErr
