@@ -12,7 +12,6 @@ main = do
     inp <- readFile filePath
     putStrLn $ show $ process inp
 
--- How to do this without nested eithers?
 process :: String -> Either String (Either String Value)
 process inp = do
     parsed <- parsecErrToString inp

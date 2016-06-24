@@ -1,0 +1,6 @@
+data Maybe = <Nothing:Unit, Just:Int>;
+
+((\x: Maybe -> case x of
+    <Nothing = x> -> 0 |
+    <Just = x> -> (x * x)
+) (<Just = 2> as Maybe))

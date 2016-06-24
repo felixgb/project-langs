@@ -12,6 +12,7 @@ data Term
     | TmUnit Info
     | TmCase Info Term [(String, (String, Term))]
     | TmTag Info String Term Type
+    | TmDataDec Info String Type
     deriving (Show, Eq)
 --
 --instance Show Term where
@@ -35,6 +36,7 @@ data Type
     | TyInt
     | TyUnit
     | TyVariant [(String, Type)]
+    | TyDataVar String
     | TyArrow Type Type
     deriving (Show, Eq)
 

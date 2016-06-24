@@ -57,6 +57,7 @@ parseInt = do
 parseType = (reserved "Int" >> return TyInt) 
     <|> (reserved "Bool" >> return TyBool) 
     <|> parseVariant
+    <|> (ident >>= \l -> return $ TyDataVar l)
 
 parseAbs :: LCParser
 parseAbs = do
@@ -127,6 +128,15 @@ parseVar = do
     pos <- getPosition
     return $ TmVar (infoFrom pos) v
 
+parseDataDec :: LCParser
+parseDataDec = do
+    reserved "data"
+    name <- ident
+    reservedOp "="
+    varient <- parseVariant
+    pos <- getPosition
+    return $ TmDataDec (infoFrom pos) name varient
+
 parseTrue :: LCParser
 parseTrue = reserved "true" >> getPosition >>= \pos -> return $ TmTrue (infoFrom pos)
 
@@ -134,6 +144,8 @@ parseFalse :: LCParser
 parseFalse = reserved "false" >> getPosition >>= \pos -> return $ TmFalse (infoFrom pos)
 
 parseBool = parseTrue <|> parseFalse
+
+parseUnit = reserved "unit" >> getPosition >>= \pos -> return $ TmUnit (infoFrom pos)
 
 factor' :: LCParser
 factor' = parens parseExps
@@ -143,6 +155,8 @@ factor' = parens parseExps
     <|> parseTag
     <|> parseIf
     <|> parseAbs
+    <|> parseUnit
+    <|> parseDataDec
     <|> parseVar
 
 parseExps = do
@@ -150,10 +164,15 @@ parseExps = do
     pos <- getPosition
     return $ foldl1 (TmApp $ infoFrom pos) es
 
+parseTopLevel = do
+    es <- sepBy1 term $ reservedOp ";"
+    pos <- getPosition
+    return $ foldr1 (\tm1 tm2 -> TmApp (infoFrom pos) (TmAbs DummyInfo "fresh!" TyUnit tm2) tm1) es
+
 contents p = do
     Tok.whiteSpace lexer
     r <- p
     eof
     return r
 
-parseExp s = runParser (contents parseExps) () "untyped" s
+parseExp s = runParser (contents parseTopLevel) () "untyped" s
