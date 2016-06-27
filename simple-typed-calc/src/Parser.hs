@@ -28,7 +28,11 @@ reserved = Tok.reserved lexer
 
 parens = Tok.parens lexer
 
+brackets = Tok.brackets lexer
+
 ident = Tok.identifier lexer
+
+commaSep = Tok.commaSep lexer
 
 type LCParser = Parsec String () Term
 
@@ -47,28 +51,15 @@ table = [[binary "*" Times Ex.AssocLeft]
 term :: LCParser
 term = Ex.buildExpressionParser table factor'
 
-parseInt :: LCParser
-parseInt = do
-    pos <- getPosition
-    n <- Tok.integer lexer
-    return $ TmInt (infoFrom pos) (fromIntegral n)
+-- Types -----------------------------------------------------------------------
 
---parseType :: LCParser
 parseType = (reserved "Int" >> return TyInt) 
     <|> (reserved "Bool" >> return TyBool) 
+    <|> (reserved "Unit" >> return TyUnit)
     <|> parseVariant
+    <|> parseRecTy
+    <|> parsePairType
     <|> (ident >>= \l -> return $ TyDataVar l)
-
-parseAbs :: LCParser
-parseAbs = do
-    reservedOp "\\"
-    v <- ident
-    reservedOp ":"
-    ty <- parseType
-    reservedOp "->"
-    term <- parseExps
-    pos <- getPosition
-    return $ TmAbs (infoFrom pos) v ty term
 
 parseVariant = do
     reservedOp "<"
@@ -80,6 +71,36 @@ parseVariant = do
             reservedOp ":"
             ty <- parseType
             return (l, ty)
+
+parseRecTy = do
+    reserved "Rec"
+    tyVar <- ident
+    reservedOp "->"
+    ty <- parseType
+    return $ TyRecTy tyVar ty
+
+parsePairType = do
+    tys <- parens $ commaSep parseType
+    return $ TyProd tys
+
+-- Terms -----------------------------------------------------------------------
+
+parseInt :: LCParser
+parseInt = do
+    pos <- getPosition
+    n <- Tok.integer lexer
+    return $ TmInt (infoFrom pos) (fromIntegral n)
+
+parseAbs :: LCParser
+parseAbs = do
+    reservedOp "\\"
+    v <- ident
+    reservedOp ":"
+    ty <- parseType
+    reservedOp "->"
+    term <- parseExps
+    pos <- getPosition
+    return $ TmAbs (infoFrom pos) v ty term
 
 parseTag :: LCParser
 parseTag = do
@@ -133,9 +154,41 @@ parseDataDec = do
     reserved "data"
     name <- ident
     reservedOp "="
-    varient <- parseVariant
+    varient <- parseType
     pos <- getPosition
     return $ TmDataDec (infoFrom pos) name varient
+
+parsePair :: LCParser
+parsePair = do
+    pos <- getPosition
+    tms <- parens $ commaSep factor'
+    return $ TmPair (infoFrom pos) tms
+
+parseProj :: LCParser
+parseProj = do
+    pos <- getPosition
+    idx <- parseFst <|> parseSnd
+    t <- factor'
+    return $ TmProj (infoFrom pos) t idx
+    where
+        parseFst = (reserved "fst" >> return 0)
+        parseSnd = (reserved "snd" >> return 1)
+
+parseFold :: LCParser
+parseFold = do
+    pos <- getPosition
+    reserved "fold"
+    ty <- brackets parseType
+    tm <- factor'
+    return $ TmFold (infoFrom pos) ty tm
+
+parseUnfold :: LCParser
+parseUnfold = do
+    pos <- getPosition
+    reserved "unfold"
+    ty <- brackets parseType
+    tm <- factor'
+    return $ TmUnfold (infoFrom pos) ty tm
 
 parseTrue :: LCParser
 parseTrue = reserved "true" >> getPosition >>= \pos -> return $ TmTrue (infoFrom pos)
@@ -148,7 +201,8 @@ parseBool = parseTrue <|> parseFalse
 parseUnit = reserved "unit" >> getPosition >>= \pos -> return $ TmUnit (infoFrom pos)
 
 factor' :: LCParser
-factor' = parens parseExps
+factor' = (try $ parens parseExps)
+    <|> parseProj
     <|> parseBool
     <|> parseInt
     <|> parseCase
@@ -157,7 +211,10 @@ factor' = parens parseExps
     <|> parseAbs
     <|> parseUnit
     <|> parseDataDec
+    <|> parseFold
+    <|> parseUnfold
     <|> parseVar
+    <|> (try parsePair)
 
 parseExps = do
     es <- many1 term

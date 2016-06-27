@@ -1,1 +1,1 @@
-./dist/build/untyped-calculus/untyped-calculus $1
+./dist/build/simple-typed-calc/simple-typed-calc $1

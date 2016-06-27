@@ -13,7 +13,10 @@ data Value
     = VInt Int
     | VBool Bool
     | VTag String Value
+    | VPair [Value]
     | VUnit
+    | VFold Value
+    | VUnfold Value
     | VClosure String Term TermEnv
 
 type TermEnv = Map.Map String Value
@@ -22,7 +25,11 @@ instance Show Value where
     show (VInt n) = show n
     show (VBool b) = show b
     show (VTag name t) = "Tag " ++ name ++ ", " ++ (show t)
+    show (VPair [v1, v2]) = "(" ++ (show v1) ++ ", " ++ (show v2) ++ ")"
     show (VClosure name body _) = "\\" ++ name ++ " -> " ++ show body
+    show (VFold v) = show v
+    show (VUnfold v) = show v
+    show VUnit = "unit"
 
 runEval inp = eval emptyEnv inp
     where emptyEnv = Map.empty
@@ -32,16 +39,23 @@ eval env (TmTrue _) = Right $ VBool True
 eval env (TmFalse _) = Right $ VBool False
 eval env (TmInt _ n) = Right $ VInt n
 eval env (TmUnit _) = Right $ VUnit
+eval env (TmPair _ tms) = do
+    vs <- mapM (eval env) tms
+    return $ VPair vs
+eval env (TmProj _ t idx) = do
+    (VPair vs) <- eval env t
+    return $ vs !! idx
 eval env (TmDataDec _ _ _) = Right $ VUnit
 eval env (TmVar _ name) = case Map.lookup name env of
     Just v -> Right v
     Nothing -> Left $ "Can't find var: " ++ name ++ ", env: " ++ (show env)
 eval env (TmAbs info name _ body) = return $ VClosure name body env
-eval env (TmApp info t1 t2) = do
-    (VClosure x body closure) <- eval env t1
-    t2' <- eval env t2
-    let env' = Map.insert x t2' closure
-    eval env' body
+eval env (TmApp info t1 t2) = case eval env t1 of
+    Right (VClosure x body closure) -> do
+        t2' <- eval env t2
+        let env' = Map.insert x t2' closure
+        eval env' body
+    err -> Left $ show err
 eval env (TmBinOp info op t1 t2) = do
     VInt n1 <- eval env t1
     VInt n2 <- eval env t2
@@ -54,6 +68,9 @@ eval env (TmCase info tag branches) = do
 eval env (TmTag _ name t1 _) = do
        v1 <- eval env t1
        return $ VTag name v1
+eval env (TmUnfold _ _ (TmFold _ _ t)) = eval env t
+eval env (TmFold _ _ t) = eval env t
+eval env (TmUnfold _ _ t) = eval env t
 eval env err = error $ show err
 
 getBinOp :: Op -> Int -> Int -> Value

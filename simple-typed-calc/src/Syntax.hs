@@ -10,17 +10,15 @@ data Term
     | TmBinOp Info Op Term Term 
     | TmInt Info Int
     | TmUnit Info
+    -- Pair for now n-tuple later
+    | TmPair Info [Term]
+    | TmProj Info Term Int
     | TmCase Info Term [(String, (String, Term))]
     | TmTag Info String Term Type
     | TmDataDec Info String Type
+    | TmFold Info Type Term
+    | TmUnfold Info Type Term
     deriving (Show, Eq)
---
---instance Show Term where
---    show (TmInt info n) = show n
---    show (TmTrue info) = "true"
---    show (TmFalse info) = "false"
---    show (TmIf info cond t1 t2) = "if..."
---    show (TmBinOp info op t1 t2) = (show t1) ++ (show op) ++ (show t2)
 
 data Op
     = Times
@@ -37,7 +35,9 @@ data Type
     | TyUnit
     | TyVariant [(String, Type)]
     | TyDataVar String
+    | TyRecTy String Type
     | TyArrow Type Type
+    | TyProd [Type]
     deriving (Show, Eq)
 
 data Info 
