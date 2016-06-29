@@ -4,7 +4,7 @@ import Control.Monad.Except
 
 data Term
     = TmVar Info String
-    | TmAbs Info String Type Term
+    | TmAbs Info String (Maybe Type) Term
     | TmApp Info Term Term
     | TmTrue Info
     | TmFalse Info

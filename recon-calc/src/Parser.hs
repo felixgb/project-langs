@@ -95,8 +95,8 @@ parseAbs :: LCParser
 parseAbs = do
     reservedOp "\\"
     v <- ident
-    reservedOp ":"
-    ty <- parseType
+    --reservedOp ":"
+    ty <- optionMaybe $ reservedOp ":" >> parseType
     reservedOp "->"
     term <- parseExps
     pos <- getPosition
@@ -232,7 +232,7 @@ parseExps = do
 parseTopLevel = do
     es <- sepBy1 term $ reservedOp ";"
     pos <- getPosition
-    return $ foldr1 (\tm1 tm2 -> TmApp (infoFrom pos) (TmAbs DummyInfo "fresh!" TyUnit tm2) tm1) es
+    return $ foldr1 (\tm1 tm2 -> TmApp (infoFrom pos) (TmAbs DummyInfo "fresh!" (Just TyUnit) tm2) tm1) es
 
 contents p = do
     Tok.whiteSpace lexer
