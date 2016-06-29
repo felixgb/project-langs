@@ -1,0 +1,1 @@
+if isZero pred succ 0 then false else true

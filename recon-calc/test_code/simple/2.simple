@@ -1,0 +1,5 @@
+1;
+(\x: <Left:Bool, Right:Int> -> case x of
+    <Right=y> -> (y * y)
+    | <Left=z> -> 666
+    ) (<Right = 2> as <Left:Bool, Right:Int>)
