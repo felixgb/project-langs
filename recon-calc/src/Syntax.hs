@@ -62,7 +62,7 @@ instance Show CalcError where
     show (ErrTyVar msg) = msg
     show (ErrParse) = "parse error"
 
-type ThrowsError a = Either CalcError a
+type ThrowsError = Either CalcError
 
 extractValue :: ThrowsError a -> a
 extractValue (Right val) = val

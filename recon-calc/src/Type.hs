@@ -3,46 +3,57 @@ module Type where
 import Syntax
 import Parser
 import Data.List
+
 import Control.Monad (when)
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.RWS
 
 import qualified Data.Map as Map
 
 type TypeEnv = Map.Map String Type
--- 
--- checkType :: Term -> Either String Type
--- checkType s = typeOf dataTermEnv s
---     where emptyTermEnv = Map.empty
---           dataTermEnv = dataToContext emptyTermEnv s
--- 
--- inferType t = (recon emptyTermEnv names t)
---     where emptyTermEnv = Map.empty
---           dataTermEnv = dataToContext emptyTermEnv t
--- 
--- foo :: String -> ThrowsError Type
--- foo inp = case parseExp inp of
---     Right ast -> do
---         (tyT, constrs) <- inferType ast
---         constrs' <- unify constrs
---         return $ applySubst constrs' tyT
---     Left err -> throwError $ ErrParse
--- 
-applySubst :: Constraints -> Type -> Type
-applySubst constr tyT = foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyT constr
+
+type Constraints = [(Type, Type)]
+
+data NameState = NameState { count :: Int }
+
+type Infer a = (RWST
+    TypeEnv
+    Constraints
+    NameState
+    (Except CalcError)
+    a)
 
 names :: [String]
 names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
 
-data NameState = NameState { count :: Int }
-
-fresh :: State NameState Type
+fresh :: Infer Type
 fresh = do
     s <- get
     put s { count = count s + 1 }
     return $ TyVar (names !! count s)
 
-type Constraints = [(Type, Type)]
+initNameState :: NameState
+initNameState = NameState { count = 0 }
+
+runInfer :: TypeEnv -> Infer Type -> ThrowsError (Type, Constraints)
+runInfer env m = runExcept $ evalRWST m env initNameState
+
+inferType t = runInfer emptyTypeEnv (recon t)
+    where emptyTypeEnv = Map.empty
+          dataTypeEnv = dataToContext dataTypeEnv t
+
+foo :: String -> ThrowsError Type
+foo inp = case parseExp inp of
+    Right ast -> do
+        (tyT, constrs) <- inferType ast
+        -- return (tyT, constrs)
+        constrs' <- unify constrs
+        return $ applySubst constrs' tyT
+    Left err -> throwError $ ErrParse
+ 
+applySubst :: Constraints -> Type -> Type
+applySubst constr tyT = foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyT constr
 
 occursIn :: String -> Type -> Bool
 occursIn tyX (TyArrow tyT1 tyT2) = occursIn tyX tyT1 || occursIn tyX tyT2
@@ -85,31 +96,42 @@ lookupVar ident env = case Map.lookup ident env of
     Just ty -> return ty
     Nothing -> throwError $ ErrTyVar ident
 
-recon :: TypeEnv -> [String] -> Term -> (ThrowsError (Type, Constraints))
-recon env names (TmVar _ ident) = do
-    tyT <- lookupVar ident env
-    return (tyT, [])
-recon env names (TmAbs info name (Just tyT1) t2) = do
-    let env' = Map.insert name tyT1 env
-    (tyT2, constraints) <- recon env' names t2
-    return ((TyArrow tyT1 tyT2), constraints)
-recon env (newN : supply) (TmAbs info name Nothing t2) = do
-    let tyT1 = TyVar newN
-    let env' = Map.insert name tyT1 env
-    (tyT2, constraints) <- recon env' names t2
-    return ((TyArrow tyT1 tyT2), constraints)
-recon env (name : supply) (TmApp info t1 t2) = do
-    (tyT1, constr1) <- recon env supply t1
-    (tyT2, constr2) <- recon env supply t2
-    let newTyVar = TyVar name
-    let newConstr = [(tyT1, (TyArrow tyT2 newTyVar))]
-    return (newTyVar, newConstr ++ constr2 ++ constr1)
-recon env names (TmInt info _) = return (TyInt, [])
-recon env names (TmIsZero info t) = do
-    (tyT, constrs) <- recon env names t
-    return $ (TyBool, (tyT, TyInt) : constrs)
-recon env names (TmFalse info) = return (TyBool, [])
-recon env names (TmTrue info) = return (TyBool, [])
+insertIntoEnv :: String -> Type -> Infer Type -> Infer Type
+insertIntoEnv x ty m = do
+    let newEnv = Map.insert x ty
+    local newEnv m
+
+lookupEnv :: String -> Infer Type
+lookupEnv x = do
+    env <- ask
+    case Map.lookup x env of
+        Just ty -> return ty
+        Nothing -> throwError $ ErrTyVar x
+
+recon :: Term -> Infer Type
+recon (TmVar _ ident) = do
+    tyT <- lookupEnv ident
+    return tyT
+recon (TmAbs info name (Just tyT1) t2) = do
+    tyT2 <- insertIntoEnv name tyT1 (recon t2)
+    return $ TyArrow tyT1 tyT2
+recon (TmAbs info name Nothing t2) = do
+    tyT1 <- fresh
+    tyT2 <- insertIntoEnv name tyT1 (recon t2)
+    return $ TyArrow tyT1 tyT2
+recon (TmApp info t1 t2) = do
+    tyT1 <- recon t1
+    tyT2 <- recon t2
+    newTyVar <- fresh
+    tell $ [(tyT1, (TyArrow tyT2 newTyVar))]
+    return newTyVar
+recon (TmInt info _) = return TyInt
+recon (TmIsZero info t) = do
+    tyT <- recon t
+    tell $ [(tyT, TyInt)]
+    return TyBool
+recon (TmTrue info) = return TyBool
+recon (TmFalse info) = return TyBool
 
 dataToContext :: TypeEnv -> Term -> TypeEnv
 dataToContext env (TmDataDec _ name var) = Map.insert name var env
