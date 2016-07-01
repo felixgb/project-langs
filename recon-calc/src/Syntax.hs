@@ -52,13 +52,15 @@ data Info
 
 data CalcError
     = ErrDefault String
-    | ErrUnify String
+    | ErrUnifyCircular String Type
+    | ErrUnifyUnsolvable [(Type, Type)]
     | ErrTyVar String
     | ErrParse
 
 instance Show CalcError where
     show (ErrDefault msg) = msg
-    show (ErrUnify msg) = msg
+    show (ErrUnifyCircular name ty) = "circular constraints"
+    show (ErrUnifyUnsolvable constrs) = "unsolvable constraints"
     show (ErrTyVar msg) = msg
     show (ErrParse) = "parse error"
 

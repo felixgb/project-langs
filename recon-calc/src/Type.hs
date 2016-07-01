@@ -2,14 +2,14 @@ module Type where
 
 import Syntax
 import Parser
+
 import Data.List
+import qualified Data.Map as Map
 
 import Control.Monad (when)
 import Control.Monad.Except
 import Control.Monad.State
-import Control.Monad.RWS
-
-import qualified Data.Map as Map
+import Control.Monad.RWS.Strict
 
 type TypeEnv = Map.Map String Type
 
@@ -39,27 +39,29 @@ initNameState = NameState { count = 0 }
 runInfer :: TypeEnv -> Infer Type -> ThrowsError (Type, Constraints)
 runInfer env m = runExcept $ evalRWST m env initNameState
 
+inferType :: Term -> ThrowsError (Type, Constraints)
 inferType t = runInfer emptyTypeEnv (recon t)
     where emptyTypeEnv = Map.empty
           dataTypeEnv = dataToContext dataTypeEnv t
 
-foo :: String -> ThrowsError Type
-foo inp = case parseExp inp of
+parseAndInfer :: String -> ThrowsError Type
+parseAndInfer inp = case parseExp inp of
     Right ast -> do
         (tyT, constrs) <- inferType ast
-        -- return (tyT, constrs)
         constrs' <- unify constrs
         return $ applySubst constrs' tyT
     Left err -> throwError $ ErrParse
- 
+
 applySubst :: Constraints -> Type -> Type
 applySubst constr tyT = foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyT constr
 
 occursIn :: String -> Type -> Bool
-occursIn tyX (TyArrow tyT1 tyT2) = occursIn tyX tyT1 || occursIn tyX tyT2
-occursIn tyX TyInt = False
-occursIn tyX TyBool = False
-occursIn tyX (TyVar s) = (s == tyX)
+occursIn tyName ty = occin ty
+    where 
+        occin (TyArrow tyT1 tyT2) = occin tyT1 || occin tyT2
+        occin TyInt = False
+        occin TyBool = False
+        occin (TyVar s) = s == tyName
 
 substConstraint :: String -> Type -> Constraints -> Constraints
 substConstraint tyName tyT constr = map (\(tyS1, tyS2) -> (substType tyName tyT tyS1, substType tyName tyT tyS2)) constr
@@ -72,29 +74,22 @@ substType tyName tyT tyS = st tyS
         st TyBool = TyBool
         st (x@(TyVar s)) = if s == tyName then tyT else x
 
+unifySubst :: Type -> Type -> Constraints -> ThrowsError [(Type, Type)]
+unifySubst ty (x@(TyVar tyName)) rest 
+    | ty == x = unify rest
+    | tyName `occursIn` ty = throwError $ ErrUnifyCircular tyName ty
+    | otherwise = do
+        unified <- unify (substConstraint tyName ty rest)
+        return $ (x, ty) : unified
+
 unify :: Constraints -> ThrowsError [(Type, Type)]
 unify [] = return $ []
-unify ((tyS, (x@(TyVar tyName))) : rest) = if tyS == x then unify rest else
-    if occursIn tyName tyS
-    then throwError $ ErrUnify "circular constrait 1"
-    else do
-        unified <- unify (substConstraint tyName tyS rest)
-        return $ (x, tyS) : unified
-unify ((x@(TyVar tyName), tyT) : rest) = if tyT == x then unify rest else
-    if tyName `occursIn` tyT
-    then throwError $ ErrUnify $ "circular constraint 2, " ++ (show tyName) ++ " occurs in: " ++ (show tyT) ++ ", constraints: " ++ (show rest)
-    else do
-        unified <- unify (substConstraint tyName tyT rest)
-        return $ (x, tyT) : unified
+unify ((tyS, (x@(TyVar tyName))) : rest) = unifySubst tyS x rest
+unify ((x@(TyVar tyName), tyT) : rest) = unifySubst tyT x rest
 unify ((TyInt, TyInt) : rest) = unify rest
 unify ((TyBool, TyBool) : rest) = unify rest
 unify (((TyArrow tyS1 tyS2), (TyArrow tyT1 tyT2)) : rest) = unify ((tyS1, tyT1) : (tyS2, tyT2) : rest)
-unify constraints  = throwError $ ErrUnify $ "Unsolvable constraints" ++ (show constraints)
-
-lookupVar :: String -> TypeEnv -> ThrowsError Type
-lookupVar ident env = case Map.lookup ident env of
-    Just ty -> return ty
-    Nothing -> throwError $ ErrTyVar ident
+unify constraints  = throwError $ ErrUnifyUnsolvable constraints
 
 insertIntoEnv :: String -> Type -> Infer Type -> Infer Type
 insertIntoEnv x ty m = do
