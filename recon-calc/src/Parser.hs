@@ -2,6 +2,8 @@ module Parser (
     parseExp
 ) where
 
+import Control.Monad.Except
+
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
@@ -240,4 +242,8 @@ contents p = do
     eof
     return r
 
-parseExp s = runParser (contents parseTopLevel) () "untyped" s
+parseExp :: String -> ThrowsError Term
+parseExp s = case runParser (contents parseTopLevel) () "untyped" s of
+    Right ast -> return ast
+    Left err -> throwError $ ErrParse (show err)
+

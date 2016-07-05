@@ -54,17 +54,23 @@ data CalcError
     = ErrDefault String
     | ErrUnifyCircular String Type
     | ErrUnifyUnsolvable [(Type, Type)]
+    | ErrNotProduct Type
+    | ErrFieldMismatch String
+    | ErrMissingLabel String
+    | ErrNotVariant 
+    | ErrNotRecTy
     | ErrTyVar String
-    | ErrParse
+    | ErrParse String
 
 instance Show CalcError where
     show (ErrDefault msg) = msg
     show (ErrUnifyCircular name ty) = "circular constraints"
-    show (ErrUnifyUnsolvable constrs) = "unsolvable constraints"
+    show (ErrUnifyUnsolvable constrs) = "unsolvable constraints: " ++ (show constrs)
+    show (ErrNotProduct ty) = "Not a product type: " ++ (show ty)
+    show (ErrFieldMismatch str) = "Field Mismatch: " ++ str
+    show (ErrMissingLabel str) = "Missing Label: " ++ str
+    show (ErrNotVariant) = "Expected a variant type"
     show (ErrTyVar msg) = msg
-    show (ErrParse) = "parse error"
+    show (ErrParse msg) = msg
 
-type ThrowsError = Either CalcError
-
-extractValue :: ThrowsError a -> a
-extractValue (Right val) = val
+type ThrowsError = Except CalcError

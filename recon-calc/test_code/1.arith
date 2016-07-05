@@ -1,1 +1,0 @@
-if isZero 0 then succ 0 else succ succ 0

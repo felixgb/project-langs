@@ -6,6 +6,8 @@ module Eval (
 import Syntax
 import Parser
 
+import Control.Monad.Except
+
 import qualified Data.Map as Map
 import Data.List
 
@@ -31,31 +33,33 @@ instance Show Value where
     show (VUnfold v) = show v
     show VUnit = "unit"
 
+runEval :: Term -> ThrowsError Value
 runEval inp = eval emptyEnv inp
     where emptyEnv = Map.empty
 
-eval :: TermEnv -> Term -> Either String Value
-eval env (TmTrue _) = Right $ VBool True
-eval env (TmFalse _) = Right $ VBool False
-eval env (TmInt _ n) = Right $ VInt n
-eval env (TmUnit _) = Right $ VUnit
+eval :: TermEnv -> Term -> ThrowsError Value
+eval env (TmTrue _) = return $ VBool True
+eval env (TmFalse _) = return $ VBool False
+eval env (TmInt _ n) = return $ VInt n
+eval env (TmUnit _) = return $ VUnit
 eval env (TmPair _ tms) = do
     vs <- mapM (eval env) tms
     return $ VPair vs
 eval env (TmProj _ t idx) = do
     (VPair vs) <- eval env t
     return $ vs !! idx
-eval env (TmDataDec _ _ _) = Right $ VUnit
+eval env (TmDataDec _ _ _) = return $ VUnit
 eval env (TmVar _ name) = case Map.lookup name env of
-    Just v -> Right v
-    Nothing -> Left $ "Can't find var: " ++ name ++ ", env: " ++ (show env)
+    Just v -> return v
+    Nothing -> throwError $ ErrDefault $ "Can't find var: " ++ name ++ ", env: " ++ (show env)
 eval env (TmAbs info name _ body) = return $ VClosure name body env
-eval env (TmApp info t1 t2) = case eval env t1 of
-    Right (VClosure x body closure) -> do
-        t2' <- eval env t2
-        let env' = Map.insert x t2' closure
-        eval env' body
-    err -> Left $ show err
+eval env (TmApp info t1 t2) = do
+    t1' <- eval env t1
+    case t1' of
+        (VClosure x body closure) -> do
+            t2' <- eval env t2
+            let env' = Map.insert x t2' closure
+            eval env' body
 eval env (TmBinOp info op t1 t2) = do
     VInt n1 <- eval env t1
     VInt n2 <- eval env t2

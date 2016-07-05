@@ -1,0 +1,8 @@
+result: 1!
+code: ((\x -> x) 1)!
+
+result: 2 !
+code: ((\y -> y + 1) 1)!
+
+result: failed!
+code: ((\x -> x))!

@@ -37,20 +37,26 @@ initNameState :: NameState
 initNameState = NameState { count = 0 }
 
 runInfer :: TypeEnv -> Infer Type -> ThrowsError (Type, Constraints)
-runInfer env m = runExcept $ evalRWST m env initNameState
+runInfer env m = evalRWST m env initNameState
 
 inferType :: Term -> ThrowsError (Type, Constraints)
 inferType t = runInfer emptyTypeEnv (recon t)
     where emptyTypeEnv = Map.empty
           dataTypeEnv = dataToContext dataTypeEnv t
 
-parseAndInfer :: String -> ThrowsError Type
-parseAndInfer inp = case parseExp inp of
-    Right ast -> do
-        (tyT, constrs) <- inferType ast
-        constrs' <- unify constrs
-        return $ applySubst constrs' tyT
-    Left err -> throwError $ ErrParse
+infer :: Term -> ThrowsError Type
+infer ast = do
+    (tyT, constrs) <- inferType ast
+    constrs' <- unify constrs
+    return $ applySubst constrs' tyT
+
+-- parseAndInfer :: String -> ThrowsError Type
+-- parseAndInfer inp = case parseExp inp of
+--     Right ast -> do
+--         (tyT, constrs) <- inferType ast
+--         constrs' <- unify constrs
+--         return $ applySubst constrs' tyT
+--     Left err -> throwError $ ErrParse
 
 applySubst :: Constraints -> Type -> Type
 applySubst constr tyT = foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyT constr
@@ -89,6 +95,7 @@ unify ((x@(TyVar tyName), tyT) : rest) = unifySubst tyT x rest
 unify ((TyInt, TyInt) : rest) = unify rest
 unify ((TyBool, TyBool) : rest) = unify rest
 unify (((TyArrow tyS1 tyS2), (TyArrow tyT1 tyT2)) : rest) = unify ((tyS1, tyT1) : (tyS2, tyT2) : rest)
+unify (((TyProd tys1), (TyProd tys2)) : rest) = unify $ (zip tys1 tys2) ++ rest
 unify constraints  = throwError $ ErrUnifyUnsolvable constraints
 
 insertIntoEnv :: String -> Type -> Infer Type -> Infer Type
@@ -97,11 +104,15 @@ insertIntoEnv x ty m = do
     local newEnv m
 
 lookupEnv :: String -> Infer Type
-lookupEnv x = do
+lookupEnv name = do
     env <- ask
-    case Map.lookup x env of
+    case Map.lookup name env of
         Just ty -> return ty
-        Nothing -> throwError $ ErrTyVar x
+        Nothing -> throwError $ ErrTyVar name
+
+simplify :: Type -> Infer Type
+simplify (TyVar name) = lookupEnv name
+simplify ty = return ty
 
 recon :: Term -> Infer Type
 recon (TmVar _ ident) = do
@@ -127,19 +138,81 @@ recon (TmIsZero info t) = do
     return TyBool
 recon (TmTrue info) = return TyBool
 recon (TmFalse info) = return TyBool
+recon (TmUnit info) = return TyUnit
+recon (TmDataDec info _ _) = return TyUnit
+recon (TmBinOp info _ t1 t2) = do
+    ty1 <- recon t1
+    ty2 <- recon t2
+    tell $ [(ty1, TyInt), (ty2, TyInt)]
+    return TyInt
+recon (TmIf info cond tThen tElse) = do
+    tyCond <- recon cond
+    tyThen <- recon tThen
+    tyElse <- recon tElse
+    tell $ [(tyCond, TyBool), (tyThen, tyElse)]
+    return tyElse
+recon (TmPair info terms) = do
+    tyTerms <- mapM recon terms
+    return $ TyProd tyTerms
+recon (TmProj info term idx) = do
+    tyT <- recon term
+    simpTy <- simplify tyT
+    case simpTy of
+        (TyProd tys) -> return $ tys !! idx
+        err -> throwError $ ErrNotProduct err
+recon (TmCase info term cases) = do
+    tyT <- recon term
+    simpTy <- simplify tyT
+    case simpTy of
+        (TyVariant fieldTypes) -> do
+            when (not $ isValidFields cases fieldTypes) (throwError $ ErrMissingLabel "Can't find label in type")
+            caseType fieldTypes cases
+        err -> throwError $ ErrNotVariant
+recon (TmTag info name term ty) = do
+    simpTy <- simplify ty
+    case simpTy of
+        (TyVariant fields) -> do
+            tyTi <- lift $ fieldLookup name fields
+            tyTiExpected <- recon term
+            if tyTi == tyTiExpected
+            then return ty
+            else throwError $ ErrFieldMismatch "Tag does not have the right fields"
+        err -> throwError $ ErrNotVariant
+recon (TmFold info tyU tm) = return $ tyU
+recon (TmUnfold info tyU tm) = do
+    simpTy <- simplify tyU
+    case simpTy of
+        (TyRecTy name tyT) -> insertIntoEnv name tyU (recon tm)
+        err -> throwError $ ErrNotRecTy
+
+fieldLookup :: String -> [(String, Type)] -> Except CalcError Type
+fieldLookup name tys = case name `lookup` tys of
+    Just ty -> return ty
+    Nothing -> throwError $ ErrMissingLabel "Can't find label in type"
+
+caseType :: [(String, Type)] -> [(String, (String, Term))] -> Infer Type
+caseType fts cases = do
+    env <- ask
+    (tyT1 : restTys) <- mapM tyLookup cases
+    if all (== tyT1) restTys 
+    then return tyT1
+    else throwError $ ErrFieldMismatch "Fields do not have the same type"
+    where tyLookup (li, (xi, ti)) = do
+            tyTi <- lift $ fieldLookup li fts
+            insertIntoEnv xi tyTi (recon ti)
+
+isValidFields :: [(String, (String, Term))] -> [(String, Type)] -> Bool
+isValidFields cases fieldTypes = all associateTypes cases
+    where associateTypes (name, (x, ty)) = name `elem` (map fst fieldTypes)
 
 dataToContext :: TypeEnv -> Term -> TypeEnv
 dataToContext env (TmDataDec _ name var) = Map.insert name var env
 dataToContext env (TmAbs _ _ _ t2) = dataToContext env t2
 dataToContext env (TmApp _ t1 t2) = (dataToContext env t1) `Map.union` (dataToContext env t2)
 dataToContext env _ = env
--- 
--- simplify :: TypeEnv -> Type -> Type
--- simplify env (TyVar name) = case name `Map.lookup` env of
---     Just ty -> ty
---     Nothing -> error $ "Can't find type var: " ++ name
--- simplify _ ty = ty
--- 
+
+
+ 
 -- typeOf :: TypeEnv -> Term -> Either String Type
 -- typeOf env (TmTrue _) = Right TyBool
 -- typeOf env (TmFalse _) = Right TyBool

@@ -191,8 +191,14 @@ terminator trm = do
     modifyBlock $ blk { term = Just trm }
     return trm
 
+-- Types -----------------------------------------------------------------------
+
 double :: Type
 double = FloatingPointType 64 IEEE
+
+struct :: [Type] -> Type
+struct elemTypes = StructureType False elemTypes
+
 
 fadd :: Operand -> Operand -> Codegen Operand
 fadd a b = instr $ FAdd NoFastMathFlags a b []
@@ -230,11 +236,18 @@ ret val = terminator $ Do $ Ret (Just val) []
 call :: Operand -> [Operand] -> Codegen Operand
 call fn args = instr $ Call Nothing CC.C [] (Right fn) (toArgs args) [] []
 
+-- Alloca instruction allocates memory on the stack frame of the currently
+-- executing instruction, to be automatically released when this fuction
+-- returns to caller.
 alloca :: Type -> Codegen Operand
 alloca ty = instr $ Alloca ty Nothing 0 []
 
+-- The store instuction writes to memory.
+-- The first argument is the value to store and the second is an address at
+-- which to store it. (for llvm, the args are backwards for the function
 store :: Operand -> Operand -> Codegen Operand
 store ptr val = instr $ Store False ptr val Nothing 0 []
 
+-- The load instruction reads from memory.
 load :: Operand -> Codegen Operand
 load ptr = instr $ Load False ptr Nothing 0 []
