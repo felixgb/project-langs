@@ -1,0 +1,2 @@
+(case <Pizza = unit> as <Pizza: Unit, Curry: Unit> of <Pizza = x> -> false
+    | <Curry = y> -> true)

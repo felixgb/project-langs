@@ -1,0 +1,2 @@
+data Pepper = <Red: Unit, Green: Unit, Yellow: Unit>;
+((\x -> x) 2)

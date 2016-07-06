@@ -40,9 +40,15 @@ runInfer :: TypeEnv -> Infer Type -> ThrowsError (Type, Constraints)
 runInfer env m = evalRWST m env initNameState
 
 inferType :: Term -> ThrowsError (Type, Constraints)
-inferType t = runInfer emptyTypeEnv (recon t)
+inferType t = runInfer dataTypeEnv (recon t)
     where emptyTypeEnv = Map.empty
-          dataTypeEnv = dataToContext dataTypeEnv t
+          dataTypeEnv = dataToContext emptyTypeEnv t
+
+dataToContext :: TypeEnv -> Term -> TypeEnv
+dataToContext env (TmDataDec _ name var) = Map.insert name var env
+dataToContext env (TmAbs _ _ _ t2) = dataToContext env t2
+dataToContext env (TmApp _ t1 t2) = (dataToContext env t1) `Map.union` (dataToContext env t2)
+dataToContext env _ = env
 
 infer :: Term -> ThrowsError Type
 infer ast = do
@@ -78,6 +84,7 @@ substType tyName tyT tyS = st tyS
         st (TyArrow tyS1 tyS2) = TyArrow (st tyS1) (st tyS2)
         st TyInt = TyInt
         st TyBool = TyBool
+        st TyUnit = TyUnit
         st (x@(TyVar s)) = if s == tyName then tyT else x
 
 unifySubst :: Type -> Type -> Constraints -> ThrowsError [(Type, Type)]
@@ -93,9 +100,11 @@ unify [] = return $ []
 unify ((tyS, (x@(TyVar tyName))) : rest) = unifySubst tyS x rest
 unify ((x@(TyVar tyName), tyT) : rest) = unifySubst tyT x rest
 unify ((TyInt, TyInt) : rest) = unify rest
+unify ((TyUnit, TyUnit) : rest) = unify rest
 unify ((TyBool, TyBool) : rest) = unify rest
 unify (((TyArrow tyS1 tyS2), (TyArrow tyT1 tyT2)) : rest) = unify ((tyS1, tyT1) : (tyS2, tyT2) : rest)
 unify (((TyProd tys1), (TyProd tys2)) : rest) = unify $ (zip tys1 tys2) ++ rest
+-- unify (((TyVariant tys1), (TyVariant tys2)) : rest) = unify 
 unify constraints  = throwError $ ErrUnifyUnsolvable constraints
 
 insertIntoEnv :: String -> Type -> Infer Type -> Infer Type
@@ -108,7 +117,7 @@ lookupEnv name = do
     env <- ask
     case Map.lookup name env of
         Just ty -> return ty
-        Nothing -> throwError $ ErrTyVar name
+        Nothing -> throwError $ ErrTyVar name (Map.assocs env)
 
 simplify :: Type -> Infer Type
 simplify (TyVar name) = lookupEnv name
@@ -204,12 +213,6 @@ caseType fts cases = do
 isValidFields :: [(String, (String, Term))] -> [(String, Type)] -> Bool
 isValidFields cases fieldTypes = all associateTypes cases
     where associateTypes (name, (x, ty)) = name `elem` (map fst fieldTypes)
-
-dataToContext :: TypeEnv -> Term -> TypeEnv
-dataToContext env (TmDataDec _ name var) = Map.insert name var env
-dataToContext env (TmAbs _ _ _ t2) = dataToContext env t2
-dataToContext env (TmApp _ t1 t2) = (dataToContext env t1) `Map.union` (dataToContext env t2)
-dataToContext env _ = env
 
 
  

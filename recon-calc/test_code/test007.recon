@@ -1,0 +1,5 @@
+data Pepper = <Red: Unit, Green: Unit, Yellow: Unit>;
+
+((\pepper: Pepper -> case pepper of <Red = x> -> 1
+    | <Green = x> -> 2
+    | <Yellow = x> -> 3) (<Red = unit> as Pepper))

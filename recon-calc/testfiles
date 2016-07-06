@@ -1,8 +1,39 @@
-result: 1!
-code: ((\x -> x) 1)!
+result: 1
+path: test001.recon
 
-result: 2 !
-code: ((\y -> y + 1) 1)!
+result: 2
+path: test002.recon
 
-result: failed!
-code: ((\x -> x))!
+result: 5
+path: test003.recon
+
+-- Nested functions, higher order functions
+result: 2
+path: test004.recon
+
+-- isZero
+result: true
+path: test005.recon
+
+-- Higher order functions, isZero
+result: false
+path: test006.recon
+
+-- Data declarations and case statement
+-- FAILS if type passed to case is not a tag!
+-- Why does this return a type???
+result: 1
+path: test007.recon
+
+-- Data declarations fails beacuse they are abstractions with type unit, they
+-- should be seperate from declarations
+result: 2
+path: test008.recon
+
+-- Case statment with vars
+result: false
+path: test009.recon
+
+-- Case statment without vars
+result: false
+path: test010.recon

@@ -13,17 +13,14 @@ import Top
 import Syntax
 import Eval
 
-type Code = String
-type Result = String
-
-data Test = Test { code :: String
+data Test = Test { path :: String
                  , result :: String
                  } deriving (Eq, Show)
 
 lexer = Tok.makeTokenParser style
     where
         ops = [":"]
-        names = ["result", "code"]
+        names = ["result", "path"]
         style = emptyDef {
             Tok.commentLine = "--"
             , Tok.reservedOpNames = ops
@@ -34,18 +31,22 @@ reservedOp = Tok.reservedOp lexer
 
 reserved = Tok.reserved lexer
 
-tillMark = do
-    p <- manyTill (noneOf "!") (reserved "!")
-    return p
+line w = do
+    reserved w
+    reservedOp ":"
+    result <- many (noneOf "\n")
+    many (newline <|> comment)
+    return result
 
 parseCodeTest = do
-    reserved "result"
-    reservedOp ":"
-    result <- tillMark
-    reserved "code"
-    reservedOp ":"
-    code <-  tillMark
-    return $ Test code result
+    result <- line "result"
+    path <- line "path"
+    return $ Test path result
+
+comment = do
+    reservedOp "--"
+    manyTill anyChar newline
+    return 'x'
 
 contents p = do
     Tok.whiteSpace lexer
@@ -60,19 +61,22 @@ runTest code = case runExcept $ process code of
     (Right val) -> show val
     (Left err) -> show err
 
-strip  = T.unpack . T.strip . T.pack
+strip = T.unpack . T.strip . T.pack
 
-compareTestToResult :: Test -> String
+compareTestToResult :: (String, String) -> String
 compareTestToResult test = 
     if res == expected
     then "passed"
     else "expected: " ++ expected ++ "\nbut got: " ++ res
     where
-        res = runTest (code test)
-        expected = strip $ (result test)
+        res = runTest (fst test)
+        expected = strip $ (snd test)
 
 main = do
     res <- parseTests "../testfiles"
     case res of
-        Right tests -> mapM_ putStrLn $ map compareTestToResult tests
+        Right tests -> do
+            codes <- mapM ((\p -> readFile $ "../test_code/" ++ p) . path) tests
+            let results = map result tests
+            mapM_ putStrLn $ map compareTestToResult $ zip codes results
         Left err -> print err

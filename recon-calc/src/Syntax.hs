@@ -59,18 +59,18 @@ data CalcError
     | ErrMissingLabel String
     | ErrNotVariant 
     | ErrNotRecTy
-    | ErrTyVar String
+    | ErrTyVar String [(String, Type)]
     | ErrParse String
 
 instance Show CalcError where
-    show (ErrDefault msg) = msg
+    show (ErrDefault msg) = "Default error ):" ++ msg
     show (ErrUnifyCircular name ty) = "circular constraints"
     show (ErrUnifyUnsolvable constrs) = "unsolvable constraints: " ++ (show constrs)
     show (ErrNotProduct ty) = "Not a product type: " ++ (show ty)
     show (ErrFieldMismatch str) = "Field Mismatch: " ++ str
     show (ErrMissingLabel str) = "Missing Label: " ++ str
     show (ErrNotVariant) = "Expected a variant type"
-    show (ErrTyVar msg) = msg
+    show (ErrTyVar msg env) = "Missing type variable: " ++ msg ++ ", env: " ++ (show env)
     show (ErrParse msg) = msg
 
 type ThrowsError = Except CalcError

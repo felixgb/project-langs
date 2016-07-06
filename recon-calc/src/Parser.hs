@@ -75,7 +75,7 @@ parseVariant = do
             return (l, ty)
 
 parseRecTy = do
-    reserved "Rec"
+    reserved "rec"
     tyVar <- ident
     reservedOp "->"
     ty <- parseType

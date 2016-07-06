@@ -1,0 +1,2 @@
+((\takeaway: <Pizza: Unit, Curry: Unit> -> case takeaway of <Pizza = x> -> false
+    | <Curry = y> -> true) (<Curry = unit> as <Pizza: Unit, Curry: Unit>))

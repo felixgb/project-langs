@@ -25,12 +25,12 @@ type TermEnv = Map.Map String Value
 
 instance Show Value where
     show (VInt n) = show n
-    show (VBool b) = show b
+    show (VBool b) = if b then "true" else "false"
     show (VTag name t) = "Tag " ++ name ++ ", " ++ (show t)
     show (VPair [v1, v2]) = "(" ++ (show v1) ++ ", " ++ (show v2) ++ ")"
     show (VClosure name body _) = "\\" ++ name ++ " -> " ++ show body
-    show (VFold v) = show v
-    show (VUnfold v) = show v
+    show (VFold v) = "fold: " ++ (show v)
+    show (VUnfold v) = "unfold" ++ (show v)
     show VUnit = "unit"
 
 runEval :: Term -> ThrowsError Value
@@ -64,6 +64,9 @@ eval env (TmBinOp info op t1 t2) = do
     VInt n1 <- eval env t1
     VInt n2 <- eval env t2
     return $ getBinOp op n1 n2
+eval env (TmIsZero info t) = do
+    VInt v <- eval env t
+    return $ VBool $ if v == 0 then True else False
 eval env (TmCase info tag branches) = do
     (VTag name v1) <- eval env tag
     let Just (x, t2) = lookup name branches
