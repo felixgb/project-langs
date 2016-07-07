@@ -21,7 +21,10 @@ data Term
     | TmDataDec Info String Type
     | TmFold Info Type Term
     | TmUnfold Info Type Term
-    deriving (Show, Eq)
+    deriving (Eq)
+
+instance Show Term where
+    show (TmVar _ name) = name
 
 data Op
     = Times
@@ -57,8 +60,8 @@ data CalcError
     | ErrNotProduct Type
     | ErrFieldMismatch String
     | ErrMissingLabel String
-    | ErrNotVariant 
-    | ErrNotRecTy
+    | ErrNotVariant Type
+    | ErrNotRecTy Type
     | ErrTyVar String [(String, Type)]
     | ErrParse String
 
@@ -69,7 +72,8 @@ instance Show CalcError where
     show (ErrNotProduct ty) = "Not a product type: " ++ (show ty)
     show (ErrFieldMismatch str) = "Field Mismatch: " ++ str
     show (ErrMissingLabel str) = "Missing Label: " ++ str
-    show (ErrNotVariant) = "Expected a variant type"
+    show (ErrNotVariant ty) = "Not a Variant type: " ++ (show ty)
+    show (ErrNotRecTy ty) = "Not a recursive type: " ++ (show ty)
     show (ErrTyVar msg env) = "Missing type variable: " ++ msg ++ ", env: " ++ (show env)
     show (ErrParse msg) = msg
 

@@ -1,2 +1,6 @@
-((\takeaway: <Pizza: Unit, Curry: Unit> -> case takeaway of <Pizza = x> -> false
-    | <Curry = y> -> true) (<Curry = unit> as <Pizza: Unit, Curry: Unit>))
+data List = rec L -> <Nil: Unit, Cons: (Int, L)>;
+
+-- Test if a list is nil
+((\x -> case (unfold [List] x) of <Nil = a> -> true
+    | <Cons = b> -> false) (fold [List] (<Nil = unit> as List)))
+

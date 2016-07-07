@@ -20,20 +20,31 @@ result: false
 path: test006.recon
 
 -- Data declarations and case statement
--- FAILS if type passed to case is not a tag!
--- Why does this return a type???
 result: 1
 path: test007.recon
 
--- Data declarations fails beacuse they are abstractions with type unit, they
--- should be seperate from declarations
 result: 2
 path: test008.recon
 
--- Case statment with vars
-result: false
+-- Case statement with recursive types, lists
+result: true
 path: test009.recon
 
--- Case statment without vars
+-- Case statement
 result: false
 path: test010.recon
+
+result: \y -> y
+path: test011.recon
+
+-- pairs, projection
+result: 1
+path: test012.recon
+
+-- addition on inferred var
+result: 3
+path: test013.recon
+
+-- Type vars and recursive types
+result: false
+path: test014.recon

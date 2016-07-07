@@ -78,5 +78,5 @@ main = do
         Right tests -> do
             codes <- mapM ((\p -> readFile $ "../test_code/" ++ p) . path) tests
             let results = map result tests
-            mapM_ putStrLn $ map compareTestToResult $ zip codes results
+            mapM_ (putStrLn . (\(n, r) -> (show n) ++ ": " ++ r)) $ zip [1..] (map compareTestToResult $ zip codes results)
         Left err -> print err

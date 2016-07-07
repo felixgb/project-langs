@@ -1,0 +1,5 @@
+data List = rec L -> <Nil: Unit, Cons: (T, L)>;
+
+-- Test if a list is nil
+((\x -> case (unfold [List] x) of <Nil = a> -> true
+    | <Cons = b> -> false) (fold [List] (<Cons = (1, (<Nil = unit> as List))> as List)))

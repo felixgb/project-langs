@@ -33,6 +33,12 @@ fresh = do
     put s { count = count s + 1 }
     return $ TyVar (names !! count s)
 
+-- Gets the current fresh var name, kinda a bodge, need to check...
+current :: Infer String
+current = do
+    s <- get
+    return $ (names !! count s)
+
 initNameState :: NameState
 initNameState = NameState { count = 0 }
 
@@ -74,6 +80,7 @@ occursIn tyName ty = occin ty
         occin TyInt = False
         occin TyBool = False
         occin (TyVar s) = s == tyName
+        occin (TyProd _) = False
 
 substConstraint :: String -> Type -> Constraints -> Constraints
 substConstraint tyName tyT constr = map (\(tyS1, tyS2) -> (substType tyName tyT tyS1, substType tyName tyT tyS2)) constr
@@ -120,7 +127,9 @@ lookupEnv name = do
         Nothing -> throwError $ ErrTyVar name (Map.assocs env)
 
 simplify :: Type -> Infer Type
-simplify (TyVar name) = lookupEnv name
+simplify (TyVar name) = do
+    x <- lookupEnv name
+    simplify x
 simplify ty = return ty
 
 recon :: Term -> Infer Type
@@ -135,8 +144,9 @@ recon (TmAbs info name Nothing t2) = do
     tyT2 <- insertIntoEnv name tyT1 (recon t2)
     return $ TyArrow tyT1 tyT2
 recon (TmApp info t1 t2) = do
-    tyT1 <- recon t1
     tyT2 <- recon t2
+    ty2Var <- current
+    tyT1 <- insertIntoEnv ty2Var tyT2 (recon t1)
     newTyVar <- fresh
     tell $ [(tyT1, (TyArrow tyT2 newTyVar))]
     return newTyVar
@@ -176,7 +186,10 @@ recon (TmCase info term cases) = do
         (TyVariant fieldTypes) -> do
             when (not $ isValidFields cases fieldTypes) (throwError $ ErrMissingLabel "Can't find label in type")
             caseType fieldTypes cases
-        err -> throwError $ ErrNotVariant
+        (TyRecTy _ (TyVariant fieldTypes)) -> do
+            when (not $ isValidFields cases fieldTypes) (throwError $ ErrMissingLabel "Can't find label in type")
+            caseType fieldTypes cases
+        err -> throwError $ ErrNotVariant err
 recon (TmTag info name term ty) = do
     simpTy <- simplify ty
     case simpTy of
@@ -186,13 +199,19 @@ recon (TmTag info name term ty) = do
             if tyTi == tyTiExpected
             then return ty
             else throwError $ ErrFieldMismatch "Tag does not have the right fields"
-        err -> throwError $ ErrNotVariant
+        (TyRecTy _ (TyVariant fields)) -> do
+            tyTi <- lift $ fieldLookup name fields
+            tyTiExpected <- recon term
+            if tyTi == tyTiExpected
+            then return ty
+            else throwError $ ErrFieldMismatch "Tag does not have the right fields"
+        err -> throwError $ ErrNotVariant err
 recon (TmFold info tyU tm) = return $ tyU
 recon (TmUnfold info tyU tm) = do
     simpTy <- simplify tyU
     case simpTy of
         (TyRecTy name tyT) -> insertIntoEnv name tyU (recon tm)
-        err -> throwError $ ErrNotRecTy
+        err -> throwError $ ErrNotRecTy err
 
 fieldLookup :: String -> [(String, Type)] -> Except CalcError Type
 fieldLookup name tys = case name `lookup` tys of
