@@ -48,3 +48,11 @@ path: test013.recon
 -- Type vars and recursive types
 result: false
 path: test014.recon
+
+-- "head" function, with optional types
+result: Tag Some, 1
+path: test015.recon
+
+-- Exception when wrong type is passed to case
+result: Not a Variant type: TyInt
+path: test016.recon

@@ -1,0 +1,5 @@
+data List = rec L -> <Nil: Unit, Cons: (Int, L)>;
+data Option = <None: Unit, Some: Int>;
+
+((\x -> case (unfold [List] x) of <Nil = x> -> <None = unit> as Option
+    | <Cons = x> -> <Some = (fst x)> as Option) (fold [List] <Cons = (1, (<Nil = unit> as List))> as List))

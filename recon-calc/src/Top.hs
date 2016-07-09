@@ -8,23 +8,13 @@ import Parser
 import Type
 import Eval
 -- 
--- run :: IO ()
--- run = do
---     filePath <- fmap head getArgs
---     inp <- readFile filePath
---     putStrLn $ show $ process inp
+-- main = do
+--     path <- fmap head getArgs
+--     code <- readFile path
+--     putStrLn $ show $ process code
 -- 
-
 process :: String -> ThrowsError Value
 process inp = do
     parsed <- parseExp inp
     infer parsed 
     runEval parsed
-
--- parseAndEval inp = do
---     parsed <- parsecErrToString inp
---     return $ runEval parsed
--- 
--- parsecErrToString inp = case parseExp inp of
---     Right ast -> Right ast
---     Left parsecErr -> Left $ show parsecErr

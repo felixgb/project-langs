@@ -73,6 +73,7 @@ occursIn tyName ty = occin ty
         occin TyBool = False
         occin (TyVar s) = s == tyName
         occin (TyProd x) = all occin x
+        occin TyUnit = False
 
 substConstraint :: String -> Type -> Constraints -> Constraints
 substConstraint tyName tyT constr = map (\(tyS1, tyS2) -> (substType tyName tyT tyS1, substType tyName tyT tyS2)) constr
@@ -193,7 +194,7 @@ recon (TmTag info name term ty) = do
             tyTiExpected <- recon term
             if tyTi == tyTiExpected
             then return ty
-            else throwError $ ErrFieldMismatch "Tag does not have the right fields"
+            else throwError $ ErrFieldMismatch $ (show tyTi) ++ ", " ++ (show tyTiExpected)
         (TyRecTy _ (TyVariant fields)) -> do
             tyTi <- lift $ fieldLookup name fields
             tyTiExpected <- recon term
