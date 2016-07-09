@@ -16,7 +16,7 @@ import Syntax
 
 lexer = Tok.makeTokenParser style
     where
-        ops = ["\\", "-", "+", "*", "="]
+        ops = ["\\", "+", "*", "="]
         names = ["if", "then", "else", "let", "rec", "in"]
         style = emptyDef {
             Tok.commentLine = "--"
@@ -48,8 +48,7 @@ binary s f assoc = Ex.Infix (opInfo s f) assoc
             return $ TmBinOp (infoFrom pos) op
 
 table = [[binary "*" Times Ex.AssocLeft]
-        ,[binary "+" Plus Ex.AssocLeft]
-        ,[binary "-" Minus Ex.AssocLeft]]
+        ,[binary "+" Plus Ex.AssocLeft]]
 
 term :: LCParser
 term = Ex.buildExpressionParser table factor'
@@ -108,19 +107,12 @@ parseLet :: LCParser
 parseLet = do
     pos <- getPosition
     reserved "let"
-    name <- ident
+    var <- ident
     reservedOp "="
     t1 <- factor'
     reserved "in"
     t2 <- factor'
-    return $ TmLet (infoFrom pos) (name, t1) t2
-
-parseFix :: LCParser
-parseFix = do
-    pos <- getPosition
-    reserved "fix" 
-    tm <- factor'
-    return $ TmFix (infoFrom pos) tm
+    return $ TmLet (infoFrom pos) (var, t1) t2
 
 parseLetRec :: LCParser
 parseLetRec = do
@@ -252,7 +244,6 @@ factor' = (try $ parens parseExps)
     <|> parseCase
     <|> parseTag
     <|> parseIf
-    -- <|> parseFix
     <|> try parseLetRec
     <|> try parseLet
     <|> parseAbs

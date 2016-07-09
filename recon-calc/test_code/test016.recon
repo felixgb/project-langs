@@ -1,2 +1,3 @@
-data Option = <Some: Int, None: Unit>;
-((\x -> case x of <Some = x> -> x | <None = x> -> -1) (1))
+-- data Option = <Some: Int, None: Unit>;
+-- ((\x -> case x of <Some = x> -> x | <None = x> -> -1) (1))
+false

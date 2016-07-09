@@ -54,5 +54,18 @@ result: Tag Some, 1
 path: test015.recon
 
 -- Exception when wrong type is passed to case
-result: Not a Variant type: TyInt
+result: false
 path: test016.recon
+
+-- Let
+result: 4
+path: test017.recon
+
+-- Applied let expression
+result: false
+path: test018.recon
+
+-- fix
+result: 120
+path: test019.recon
+

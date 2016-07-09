@@ -16,5 +16,5 @@ import Eval
 process :: String -> ThrowsError Value
 process inp = do
     parsed <- parseExp inp
-    infer parsed 
+    -- infer parsed 
     runEval parsed

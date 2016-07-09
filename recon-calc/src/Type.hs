@@ -137,6 +137,10 @@ recon (TmAbs info name Nothing t2) = do
     tyT1 <- fresh
     tyT2 <- insertIntoEnv name tyT1 (recon t2)
     return $ TyArrow tyT1 tyT2
+recon (TmLet info (name, t1) t2) = do
+    tyT1 <- fresh
+    tyT2 <- insertIntoEnv name tyT1 (recon t2)
+    return $ TyArrow tyT1 tyT2
 recon (TmApp info t1 t2) = do
     tyT2 <- recon t2
     ty2Var <- current

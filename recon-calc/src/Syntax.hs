@@ -1,6 +1,7 @@
 module Syntax where
 
 import Control.Monad.Except
+import qualified Data.Map.Strict as Map
 
 data Term
     = TmVar Info String
@@ -9,6 +10,9 @@ data Term
     | TmTrue Info
     | TmFalse Info
     | TmIf Info Term Term Term
+    | TmLet Info (String, Term) Term
+    | TmLetRec Info [(String, Term)] Term
+    | TmFix Info Term
     | TmBinOp Info Op Term Term 
     | TmInt Info Int
     | TmIsZero Info Term
@@ -21,19 +25,21 @@ data Term
     | TmDataDec Info String Type
     | TmFold Info Type Term
     | TmUnfold Info Type Term
-    deriving (Eq)
+    deriving (Eq, Show)
 
-instance Show Term where
-    show (TmVar _ name) = name
+-- instance Show Term where
+--     show (TmVar _ name) = name
 
 data Op
     = Times
     | Plus
+    | Minus
     deriving (Eq)
 
 instance Show Op where
     show Times = " * "
     show Plus = " + "
+    show Minus = " - "
 
 data Type
     = TyBool

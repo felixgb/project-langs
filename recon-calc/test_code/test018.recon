@@ -1,0 +1,1 @@
+let x = (\y -> isZero y) in (x 7)
