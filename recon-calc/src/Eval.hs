@@ -34,50 +34,14 @@ instance Show Value where
     show VUnit = "unit"
 
 runEval :: Term -> ThrowsError Value
--- runEval inp = eval emptyEnv inp
---     where emptyEnv = Map.singleton "fix" 
-runEval inp = do
-    fix <- fixTerm
-    let env = Map.singleton "fix" fix
-    eval env inp
+runEval inp = eval emptyEnv inp
+    where emptyEnv = Map.empty
 
-fixTerm :: ThrowsError Value
+fixTerm :: ThrowsError Term
 fixTerm = do
     parsed <- parseExp "\\f -> (\\x -> f (\\y -> x x y)) (\\x -> f (\\y -> x x y))"
-    evaled <- eval Map.empty parsed
-    return evaled
-
-isVal env t = case t of
-    (TmTrue _) -> True
-    (TmFalse _) -> True
-    (TmTag _ _ _ _) -> isVal env t
-    (TmUnit _) -> True
-    (TmInt _ _) -> True
-    (TmAbs _ _ _ _) -> True
-    _ -> False
-
--- evalTerm :: TermEnv -> Term -> ThrowsError Term
--- evalTerm env tm = case tm of
---     (TmIsZero _ n) -> do
---         (TmInt _ n') <- evalTerm env n
---         return $ if n' == 0 then (TmTrue DummyInfo) else (TmFalse DummyInfo)
---     (TmApp info fun arg) -> do
---         (TmClosure name body closure) <- evalTerm env fun
---         argVal <- evalTerm env arg
---         let env' = Map.insert name argVal closure
---         evalTerm env' body
---     (TmAbs info name _ body) -> return $ TmClosure name body env
---     (TmVar _ name) -> case Map.lookup name env of
---         Just v -> return v
---         Nothing -> error "can't find var"
---     (TmBinOp info op t1 t2) -> do
---         TmInt _ t1' <- evalTerm env t1
---         TmInt _ t2' <- evalTerm env t2
---         return $ getBinOp op t1' t2'
---     fixTerm@(TmFix info term) -> 
---         if isVal env term
---         then do
---             (TmAbs _ _ _ t2) -> 
+    -- evaled <- eval Map.empty parsed
+    return parsed
 
 eval :: TermEnv -> Term -> ThrowsError Value
 eval env (TmTrue _) = return $ VBool True
@@ -104,12 +68,9 @@ eval env (TmLet info (name, t1) t2) = do
     v1 <- eval env t1
     let env' = Map.insert name v1 env
     eval env' t2
--- eval env (TmFix _ tm) = do
---     eval env (TmApp DummyInfo tm (TmFix DummyInfo tm))
--- eval env (TmLetRec info defs t2) = do
---     let (name, t1) = head defs
---     let newBody = TmFix DummyInfo (TmAbs DummyInfo name Nothing t1)
---     eval env (TmLet DummyInfo (name, newBody) t2)
+eval env (TmFix info tm) = do
+    ft <- fixTerm
+    eval env $ TmApp DummyInfo ft tm
 eval env (TmApp info fun arg) = do
     funVal <- eval env fun
     case funVal of

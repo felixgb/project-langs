@@ -25,10 +25,10 @@ data Term
     | TmDataDec Info String Type
     | TmFold Info Type Term
     | TmUnfold Info Type Term
-    deriving (Eq, Show)
+    deriving (Eq)
 
--- instance Show Term where
---     show (TmVar _ name) = name
+instance Show Term where
+    show (TmVar _ name) = name
 
 data Op
     = Times

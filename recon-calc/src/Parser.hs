@@ -252,7 +252,7 @@ factor' = (try $ parens parseExps)
     <|> parseCase
     <|> parseTag
     <|> parseIf
-    -- <|> parseFix
+    <|> parseFix
     <|> try parseLetRec
     <|> try parseLet
     <|> parseAbs
