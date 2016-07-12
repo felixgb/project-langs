@@ -24,12 +24,10 @@ type Infer a = (RWST TypeEnv [Constraint] NameState ThrowsError a)
 
 dataToEnv :: TypeEnv -> Expr -> TypeEnv
 dataToEnv env expr = case expr of
-    (EDataDec _ name ty) -> Map.union (Map.insert name ty env) $ case ty of
-        (TyVariant constrs) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
-        _ -> Map.empty
+    (EDataDec _ name ty) -> case ty of
+        (TyVariant vnames tys) -> Map.unions $ fmap (\x -> Map.insert x ty env) Map.insert name ty env
     (ESeq first second) -> Map.union (dte first) (dte second)
         where dte = dataToEnv env
-    _ -> env
 
 names :: [String]
 names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
@@ -45,15 +43,15 @@ current = do
     s <- get
     return $ (names !! count s)
 
-initNameState ::TypeEnv -> NameState
-initNameState e = NameState { count = 0, env = e }
+initNameState :: NameState
+initNameState = NameState { count = 0, env = Map.empty }
 
 runInfer :: TypeEnv -> Infer Type -> ThrowsError (Type, [Constraint])
-runInfer env m = evalRWST m env (initNameState env)
+runInfer env m = evalRWST m env initNameState
 
 inferType :: Expr -> ThrowsError (Type, [Constraint])
-inferType expr = runInfer dataEnv (recon expr)
-    where dataEnv = dataToEnv Map.empty expr
+inferType expr = runInfer emptyTypeEnv (recon expr)
+    where emptyTypeEnv = Map.empty
 
 infer :: Expr -> ThrowsError Type
 infer ast = do
@@ -123,27 +121,15 @@ lookupEnv name = do
         Just ty -> return ty
         Nothing -> throwError $ ErrVarNotFound name
 
-simplify :: Type -> Infer Type
-simplify (TyVar name) = do
-    x <- lookupEnv name
-    simplify x
-simplify ty = return ty
-
 recon :: Expr -> Infer Type
 recon expr = case expr of
     (EVar _ name) -> lookupEnv name
-
-    (ETag _ name exprs) -> do
-        mapM recon exprs
-        lookupEnv name
 
     (ELit _ (LInt _)) -> return TyInt
 
     (ELit _ (LBool _)) -> return TyBool
 
     (EUnit _) -> return TyUnit
-
-    (EDataDec _ _ _) -> return TyUnit
 
     (EDef _ name args body) -> do
         argTys <- replicateM (length args) fresh
@@ -193,26 +179,3 @@ recon expr = case expr of
         tell $ [(tyCond, TyBool), (tyTr, tyFl)]
         return tyFl
 
-    (ECase info expr branches) -> do
-        tyExpr <- recon expr
-        simpTy <- simplify tyExpr
-        case simpTy of
-            (TyVariant fieldTypes) -> do
-                caseType fieldTypes branches
-
-fieldLookup :: String -> [(String, [Type])] -> ThrowsError [Type]
-fieldLookup name tys = case lookup name tys of
-    Just ty -> return ty
-    Nothing -> throwError $ ErrNotInVariantFields name
-
-caseType :: [(String, [Type])] -> [(Expr, Expr)] -> Infer Type
-caseType fts branches = do
-    (tyT1 : restTys) <- mapM tyLookup branches
-    if all (== tyT1) restTys
-    then return tyT1
-    else throwError $ ErrFieldMismatch
-    where 
-        tyLookup ((ETag _ name args), result) = do
-            tys <- lift $ fieldLookup name fts
-            zipWithM (\(EVar _ n) ty -> insertIntoEnv n ty) args tys
-            recon result

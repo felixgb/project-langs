@@ -12,8 +12,8 @@ import qualified Text.Parsec.Expr as Ex
 
 lexer = Tok.makeTokenParser style
     where
-        ops = ["+", "*", "==", "=", ";"]
-        names = ["if", "then", "else", "fun", "let"]
+        ops = ["+", "*", "==", "=", ";", "|"]
+        names = ["if", "then", "else", "fun", "let", "case", "of"]
         style = emptyDef {
             Tok.commentLine = "//"
             , Tok.reservedNames = names
@@ -30,9 +30,23 @@ brackets = Tok.brackets lexer
 
 braces = Tok.braces lexer
 
-ident = Tok.identifier lexer
+-- ident = Tok.identifier lexer
+ident = (Tok.lexeme lexer ci)
+    where 
+        ci = do
+            start <- lower
+            rest <- option [] (Tok.identifier lexer)
+            return $ start : rest
 
 commaSep = Tok.commaSep lexer
+
+-- consIdent :: Parsec String () String
+consIdent = (Tok.lexeme lexer ci)
+    where 
+        ci = do
+            start <- upper
+            rest <- option [] (Tok.identifier lexer)
+            return $ start : rest
 
 infoFrom :: SourcePos -> Info
 infoFrom pos = Info (sourceLine pos) (sourceColumn pos)
@@ -50,7 +64,67 @@ table = [[binary "*" Times Ex.AssocLeft]
 
 expr = Ex.buildExpressionParser table factor
 
+-- Parse Types
+
+parseTyInt = reserved "Int" >> return TyInt
+
+parseTyBool = reserved "Bool" >> return TyBool
+
+parseTyUnit = reserved "Unit" >> return TyUnit
+
+parseVariant = do
+    constructors <- sepBy1 parseConstructor (reservedOp "|")
+    return $ TyVariant constructors
+    where
+        parseConstructor = do
+            name <- consIdent
+            tys <- many parseType
+            return (name, tys)
+
+parseTyRec = do
+    reserved "rec"
+    tyVar <- consIdent
+    reservedOp "->"
+    ty <- parseType
+    return $ TyRec tyVar ty
+
+parseType = parseTyInt
+    <|> parseTyBool
+    <|> parseTyUnit
+    <|> parseTyRec
+    <|> parseVariant
+
 -- Parse Expressions
+
+parseDataDec = do
+    pos <- getPosition
+    reserved "data"
+    name <- consIdent
+    reservedOp "="
+    ty <- parseType
+    return $ EDataDec (infoFrom pos) name ty
+
+parseCase = do
+    pos <- getPosition
+    reserved "case"
+    expr <- factor
+    reserved "of"
+    cases <- sepBy1 (parens parseBranch) (reserved "|")
+    return $ ECase (infoFrom pos) expr cases 
+    where
+        parseBranch = do
+            pos <- getPosition
+            ident <- consIdent
+            vars <- parens $ commaSep parseVariable
+            reservedOp "->"
+            ex <- factor
+            return ((ETag (infoFrom pos) ident vars), ex)
+
+parseTag = do
+    pos <- getPosition
+    name <- consIdent
+    vars <- parens $ commaSep factor
+    return $ ETag (infoFrom pos) name vars
 
 parseVariable = do
     pos <- getPosition
@@ -103,19 +177,15 @@ parseBool = do
     bool <- parseTrue <|> parseFalse
     return $ ELit (infoFrom pos) bool
 
--- 
--- parseBool = do
---     pos <- getPosition
---     b <- Tok.boolean lexer
---     return $ ELit (infoFrom pos) (LBool b)
--- 
-
 factor = try parseInt
+    <|> try parseTag
     <|> try parseAssign
     <|> try parseBool
     <|> try parseDef
     <|> try parseInvoke
     <|> try parseIf
+    <|> try parseDataDec
+    <|> try parseCase
     <|> try parseVariable
     <|> parens expr
 

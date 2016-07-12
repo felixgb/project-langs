@@ -16,14 +16,21 @@ data Expr
     | EInvoke Info String [Expr]
     | EBinexp Info Op Expr Expr
     | EIf Info Expr Expr Expr
+    | EDataDec Info String Type
+    | ECase Info Expr [(Expr, Expr)]
+    | ETag Info String [Expr]
+    | EFold Info Type Expr
+    | EUnfold Info Type Expr
     deriving (Show, Eq)
 
 data Type
     = TyVar String
+    | TyFunc [Type] Type
     | TyInt
     | TyBool
-    | TyFunc [Type] Type
     | TyUnit
+    | TyVariant [(String, [Type])]
+    | TyRec String Type
     deriving (Show, Eq)
 
 data Op
@@ -44,6 +51,8 @@ data Info
 
 data LangErr
     = ErrParse String
+    | ErrFieldMismatch
+    | ErrNotInVariantFields String
     | ErrVarNotFound String
     | ErrCircularUnify String Type
     | ErrUnifyUnsolvable [(Type, Type)]
