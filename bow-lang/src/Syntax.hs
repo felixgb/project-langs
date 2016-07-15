@@ -2,6 +2,7 @@ module Syntax where
 
 import Control.Monad.Except
 import qualified Data.Map as Map
+import qualified Data.Vector as V
 
 type VarEnv = Map.Map String Expr
 
@@ -16,26 +17,29 @@ data Expr
     | EInvoke Info String [Expr]
     | EBinexp Info Op Expr Expr
     | EIf Info Expr Expr Expr
-    | EDataDec Info String Type
+    | ETaggedUnion Info String Type
     | ECase Info Expr [(Expr, Expr)]
     | ETag Info String [Expr]
     | EFold Info Type Expr
     | EUnfold Info Type Expr
+    | EVector (V.Vector Expr)
     deriving (Show, Eq)
 
 data Type
     = TyVar String
     | TyFunc [Type] Type
+    | TyVector Type
     | TyInt
     | TyBool
     | TyUnit
-    | TyVariant [(String, [Type])]
+    | TyTaggedUnion [(String, [Type])]
     | TyRec String Type
     deriving (Show, Eq)
 
 data Op
     = Plus
     | Times
+    | Minus
     | Equal
     deriving (Show, Eq)
 
@@ -54,9 +58,18 @@ data LangErr
     | ErrFieldMismatch
     | ErrNotInVariantFields String
     | ErrVarNotFound String
+    | ErrTyVarNotFound String (Map.Map String Type)
     | ErrCircularUnify String Type
     | ErrUnifyUnsolvable [(Type, Type)]
-    deriving (Show)
+
+instance Show LangErr where
+    show (ErrParse msg) = show msg
+    show (ErrFieldMismatch) = "field mismatch"
+    show (ErrNotInVariantFields msg) = "Not in union fields: " ++ msg
+    show (ErrVarNotFound var ) = "Can't find variable: " ++ var
+    show (ErrTyVarNotFound var env) = "Can't find type variable: " ++ var ++ ", env: " ++ (show env)
+    show (ErrCircularUnify name ty) = "Circular constraints, var: " ++ name ++ " found in " ++ (show ty)
+    show (ErrUnifyUnsolvable tys) = "Unable to unify types: " ++ (show tys)
 
 type ThrowsError = Except LangErr
 

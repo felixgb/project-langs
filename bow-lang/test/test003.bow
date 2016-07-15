@@ -1,0 +1,4 @@
+def toZero(n) {
+    let m = (n - 1);
+    if (n == 0) then true else toZero(m)
+}

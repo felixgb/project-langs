@@ -12,8 +12,8 @@ import qualified Text.Parsec.Expr as Ex
 
 lexer = Tok.makeTokenParser style
     where
-        ops = ["+", "*", "==", "=", ";", "|"]
-        names = ["if", "then", "else", "fun", "let", "case", "of"]
+        ops = ["+", "*", "-", "==", "=", ";", "|"]
+        names = ["if", "then", "else", "def", "let", "case", "of"]
         style = emptyDef {
             Tok.commentLine = "//"
             , Tok.reservedNames = names
@@ -60,6 +60,7 @@ binary s f assoc = Ex.Infix (opInfo s f) assoc
 
 table = [[binary "*" Times Ex.AssocLeft]
         ,[binary "+" Plus Ex.AssocLeft]
+        ,[binary "-" Minus Ex.AssocLeft]
         ,[binary "==" Equal Ex.AssocLeft]]
 
 expr = Ex.buildExpressionParser table factor
@@ -72,14 +73,18 @@ parseTyBool = reserved "Bool" >> return TyBool
 
 parseTyUnit = reserved "Unit" >> return TyUnit
 
-parseVariant = do
-    constructors <- sepBy1 parseConstructor (reservedOp "|")
-    return $ TyVariant constructors
+parseTyUnion = do
+    constructors <- sepBy1 parseConstructor (reservedOp ",")
+    return $ TyTaggedUnion constructors
     where
         parseConstructor = do
             name <- consIdent
-            tys <- many parseType
+            tys <- parens $ commaSep parseType
             return (name, tys)
+
+parseTyVar = do
+    tyVar <- consIdent
+    return $ TyVar tyVar
 
 parseTyRec = do
     reserved "rec"
@@ -92,32 +97,61 @@ parseType = parseTyInt
     <|> parseTyBool
     <|> parseTyUnit
     <|> parseTyRec
-    <|> parseVariant
+    <|> try parseTyUnion
+    <|> try parseTyVar
 
 -- Parse Expressions
 
-parseDataDec = do
+parseTaggedUnion = do
     pos <- getPosition
-    reserved "data"
+    reserved "tagged"
     name <- consIdent
-    reservedOp "="
-    ty <- parseType
-    return $ EDataDec (infoFrom pos) name ty
+    ty <- braces parseType
+    return $ ETaggedUnion (infoFrom pos) name (insertRec name ty)
+
+insertRec :: String -> Type -> Type
+insertRec name ty = if name `occursIn` ty 
+    then TyRec "L" (substType name (TyVar "L") ty)
+    else ty
+
+occursIn :: String -> Type -> Bool
+occursIn tyName ty = occin ty
+    where
+        occin (TyFunc tys ty2) = (all occin tys) || occin ty2
+        occin TyInt = False
+        occin TyBool = False
+        occin TyUnit = False
+        occin (TyVar s) = s == tyName
+        occin (TyTaggedUnion fts) = any occin $ concatMap snd fts
+
+
+substType :: String -> Type -> Type -> Type
+substType tyName tyT tyS = st tyS
+    where
+        st (TyFunc tys tyS2) = TyFunc (fmap st tys) (st tyS2)
+        st TyInt = TyInt
+        st TyBool = TyBool
+        st TyUnit = TyUnit
+        st (v@(TyVar name)) = if name == tyName then tyT else v
+        st (TyTaggedUnion fts) = (TyTaggedUnion (map substed fts))
+            where
+                substed (name, tys) = (name, map st tys)
 
 parseCase = do
     pos <- getPosition
     reserved "case"
     expr <- factor
     reserved "of"
-    cases <- sepBy1 (parens parseBranch) (reserved "|")
+    cases <- braces $ many parseBranch 
     return $ ECase (infoFrom pos) expr cases 
     where
         parseBranch = do
             pos <- getPosition
             ident <- consIdent
-            vars <- parens $ commaSep parseVariable
+            vars <- parens $ commaSep factor
             reservedOp "->"
             ex <- factor
+            reservedOp ";"
             return ((ETag (infoFrom pos) ident vars), ex)
 
 parseTag = do
@@ -146,7 +180,7 @@ parseInt = do
 
 parseDef = do
     pos <- getPosition
-    reserved "fun"
+    reserved "def"
     name <- ident
     params <- parens $ commaSep ident
     body <- braces $ sepBy factor (reservedOp ";") 
@@ -184,13 +218,13 @@ factor = try parseInt
     <|> try parseDef
     <|> try parseInvoke
     <|> try parseIf
-    <|> try parseDataDec
+    <|> try parseTaggedUnion
     <|> try parseCase
     <|> try parseVariable
     <|> parens expr
 
 parseDefs = do 
-    defs <- sepBy factor (reservedOp ";")
+    defs <- many (factor)
     return defs
 
 
