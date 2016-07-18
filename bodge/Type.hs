@@ -1,3 +1,4 @@
+
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -69,15 +70,15 @@ instance Substitutable Constraint where
 -- dataToEnv :: TypeEnv -> Expr -> TypeEnv
 -- dataToEnv env expr = case expr of
 --     (ETaggedUnion _ name ty) -> Map.union (Map.insert name ty env) $ case ty of
---         (TyTaggedUnion constrs) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
---         (TyRec name (TyTaggedUnion constrs)) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
+--         (TyTaggedUnion constrs) -> Map.unions $ fmap (\ x -> Map.insert x ty env) $ fmap fst constrs
+--         (TyRec name (TyTaggedUnion constrs)) -> Map.unions $ fmap (\ x -> Map.insert x ty env) $ fmap fst constrs
 --         _ -> Map.empty
 --     (ESeq first second) -> Map.union (dte first) (dte second)
 --         where dte = dataToEnv env
 --     _ -> env
 -- 
 names :: [String]
-names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
+names = zipWith (\ c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
 
 fresh :: Infer Type
 fresh = do
@@ -116,7 +117,7 @@ constraintsExpr ex = do
 -- 
 instantiate :: Scheme -> Infer Type
 instantiate (Forall xs ty) = do
-    names <- mapM (\_ -> fresh) xs
+    names <- mapM (\ _ -> fresh) xs
     let s = Subst $ Map.fromList $ zip xs names
     return $ apply s ty
 
@@ -209,7 +210,7 @@ substType tyName tyT tyS = st tyS
         -- st err = error (show err)
 
 applySubst :: [Constraint] -> Type -> Type
-applySubst constrs tyExpr = L.foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyExpr constrs
+applySubst constrs tyExpr = L.foldl' (\ tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyExpr constrs
 
 occursIn :: String -> Type -> Bool
 occursIn tyName ty = occin ty
@@ -223,7 +224,7 @@ occursIn tyName ty = occin ty
 
 
 substConstraint :: String -> Type -> [Constraint] -> [Constraint]
-substConstraint tyName tyT constrs = fmap (\(tyS1, tyS2) -> (st tyS1, st tyS2)) constrs
+substConstraint tyName tyT constrs = fmap (\ (tyS1, tyS2) -> (st tyS1, st tyS2)) constrs
     where st ty = substType tyName tyT ty
 
 unifySubst :: Type -> Type -> [Constraint] -> ThrowsError [Constraint]
@@ -248,7 +249,7 @@ unify constrs = case constrs of
     (((TyTaggedUnion fts1), (TyTaggedUnion fts2)) : rest) -> do
         let fts1tys = map snd fts1
         let fts2tys = map snd fts2
-        let ftsConstrs = concat $ zipWith (\as bs -> zip as bs) fts1tys fts2tys
+        let ftsConstrs = concat $ zipWith (\ as bs -> zip as bs) fts1tys fts2tys
         unify (ftsConstrs ++ rest)
     constrs -> throwError $ ErrUnifyUnsolvable constrs
 
@@ -302,11 +303,11 @@ recon expr = case expr of
     (EDef _ name args body) -> do
         e <- fmap env get
         funcTy <- fresh
-        inEnv name (Forall [] funcTy)
+        inEnv name (generalize e funcTy)
         argTys <- replicateM (length args) fresh
-        zipWithM (\n ty -> inEnv n (Forall [] ty)) args argTys
+        zipWithM (\ n ty -> inEnv n (generalize e ty)) args argTys
         tyBody <- recon body
-        inEnv name (Forall [] $ TyFunc argTys tyBody)
+        inEnv name (generalize e $ TyFunc argTys tyBody)
         return TyUnit
 
     (ESeq first second) -> do
@@ -322,9 +323,9 @@ recon expr = case expr of
     (EFunction name args body scope) -> do
         e <- fmap env get
         funcTy <- fresh
-        inEnv name (Forall [] funcTy)
+        inEnv name (generalize e funcTy)
         argTys <- replicateM (length args) fresh
-        zipWithM (\n ty -> inEnv n (generalize e ty)) args argTys
+        zipWithM (\ n ty -> inEnv n (generalize e ty)) args argTys
         tyBody <- recon body
         inEnv name (generalize e $ TyFunc argTys tyBody)
         return $ TyFunc argTys tyBody
@@ -376,12 +377,12 @@ opTypes Equal = TyBool
 -- branchTys :: [(Expr, Expr)] -> [(String, [Type])] -> Infer Type
 -- branchTys branches fts = do
 --     (tyT1 : restTys) <- mapM tyLookup branches
---     tell $ map (\ty -> (tyT1, ty)) restTys
+--     tell $ map (\ ty -> (tyT1, ty)) restTys
 --     return tyT1
 --     where
 --         tyLookup ((ETag _ name args), result) = do
 --             tys <- lift $ fieldLookup name fts
---             zipWithM (\(EVar _ n) ty -> insertIntoEnv n ty) args tys
+--             zipWithM (\ (EVar _ n) ty -> insertIntoEnv n ty) args tys
 --             recon result
 -- 
 -- fieldLookup :: String -> [(String, [Type])] -> ThrowsError [Type]

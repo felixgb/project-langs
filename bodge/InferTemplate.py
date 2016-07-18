@@ -1,3 +1,8 @@
+from subprocess import call
+from itertools import combinations
+import string
+
+tmpl = string.Template("""
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -45,12 +50,12 @@ instance Substitutable Type where
     freeTyVars TyBool = Set.empty
     freeTyVars TyUnit = Set.empty
     freeTyVars (TyVar a) = Set.singleton (TyVar a)
-    freeTyVars (TyFunc tys tyS2) = Set.unions $ (freeTyVars tyS2) : (fmap freeTyVars tys)
+    freeTyVars (TyFunc tys tyS2) = Set.unions $$ (freeTyVars tyS2) : (fmap freeTyVars tys)
     freeTyVars (TyTaggedUnion fts) = error "tagged union not implemented"
 
 instance Substitutable Scheme where
-    apply (Subst s) (Forall tyVars t) = Forall tyVars $ apply s' t
-        where s' = Subst $ foldr Map.delete s tyVars
+    apply (Subst s) (Forall tyVars t) = Forall tyVars $$ apply s' t
+        where s' = Subst $$ foldr Map.delete s tyVars
     freeTyVars (Forall tyVars t) = freeTyVars t `Set.difference` Set.fromList tyVars
 
 instance Substitutable a => Substitutable [a] where
@@ -59,7 +64,7 @@ instance Substitutable a => Substitutable [a] where
 
 instance Substitutable (Map.Map String Scheme) where
     apply s env = Map.map (apply s) env
-    freeTyVars env = freeTyVars $ Map.elems env
+    freeTyVars env = freeTyVars $$ Map.elems env
 
 instance Substitutable Constraint where
     apply s (t1, t2) = (apply s t1, apply s t2)
@@ -68,22 +73,22 @@ instance Substitutable Constraint where
 -- 
 -- dataToEnv :: TypeEnv -> Expr -> TypeEnv
 -- dataToEnv env expr = case expr of
---     (ETaggedUnion _ name ty) -> Map.union (Map.insert name ty env) $ case ty of
---         (TyTaggedUnion constrs) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
---         (TyRec name (TyTaggedUnion constrs)) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
+--     (ETaggedUnion _ name ty) -> Map.union (Map.insert name ty env) $$ case ty of
+--         (TyTaggedUnion constrs) -> Map.unions $$ fmap (\ x -> Map.insert x ty env) $$ fmap fst constrs
+--         (TyRec name (TyTaggedUnion constrs)) -> Map.unions $$ fmap (\ x -> Map.insert x ty env) $$ fmap fst constrs
 --         _ -> Map.empty
 --     (ESeq first second) -> Map.union (dte first) (dte second)
 --         where dte = dataToEnv env
 --     _ -> env
 -- 
 names :: [String]
-names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
+names = zipWith (\ c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
 
 fresh :: Infer Type
 fresh = do
     s <- get
     put s { count = count s + 1 }
-    return $ TyVar (names !! count s)
+    return $$ TyVar (names !! count s)
 
 initNameState ::TypeEnv -> NameState
 initNameState e = NameState { count = 0, env = e }
@@ -105,31 +110,31 @@ constraintsExpr ex = do
     (ty, constrs) <- runInfer Map.empty (recon ex)
     case runSolve constrs of
         Left err -> throwError err
-        Right subst -> return $ (constrs, subst, ty, (closeOver $ apply subst ty))
+        Right subst -> return $$ (constrs, subst, ty, (closeOver $$ apply subst ty))
 
 -- 
 -- infer :: Expr -> ThrowsError Type
 -- infer ast = do
 --     (tyExpr, constrs) <- inferExpr ast
 --     unified <- unify constrs
---     return $ applySubst unified tyExpr
+--     return $$ applySubst unified tyExpr
 -- 
 instantiate :: Scheme -> Infer Type
 instantiate (Forall xs ty) = do
-    names <- mapM (\_ -> fresh) xs
-    let s = Subst $ Map.fromList $ zip xs names
-    return $ apply s ty
+    names <- mapM (\ _ -> fresh) xs
+    let s = Subst $$ Map.fromList $$ zip xs names
+    return $$ apply s ty
 
 generalize :: TypeEnv -> Type -> Scheme
 generalize env t = Forall xs t
-    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
+    where xs = Set.toList $$ freeTyVars t `Set.difference` freeTyVars env
 
 inferExpr :: TypeEnv -> Expr -> Either LangErr Scheme
-inferExpr env ex = case runExcept $ runInfer env (recon ex) of
+inferExpr env ex = case runExcept $$ runInfer env (recon ex) of
     Left err -> Left err
     Right (ty, constrs) -> case runSolve constrs of
         Left err -> Left err
-        Right subst -> Right $ closeOver $ apply subst ty
+        Right subst -> Right $$ closeOver $$ apply subst ty
 
 closeOver :: Type -> Scheme
 closeOver = normalize . generalize Map.empty
@@ -137,7 +142,7 @@ closeOver = normalize . generalize Map.empty
 normalize :: Scheme -> Scheme
 normalize (Forall _ body) = Forall (map snd ord) (normtype body)
     where
-        ord = zip (L.nub $ fv body) (map TyVar names)
+        ord = zip (L.nub $$ fv body) (map TyVar names)
         fv (TyVar a) = [a]
         fv (TyFunc as b) = (fv b) ++ (concatMap fv as)
         fv _ = []
@@ -156,10 +161,10 @@ newtype Subst = Subst (Map.Map Type Type)
     deriving (Eq, Ord, Show, Monoid)
 
 compose :: Subst -> Subst -> Subst
-compose (Subst s1) (Subst s2) = Subst $ Map.map (apply (Subst s1)) s2 `Map.union` s1
+compose (Subst s1) (Subst s2) = Subst $$ Map.map (apply (Subst s1)) s2 `Map.union` s1
 
 runSolve :: [Constraint] -> Either LangErr Subst
-runSolve constrs = runIdentity $ runExceptT $ solver st
+runSolve constrs = runIdentity $$ runExceptT $$ solver st
     where st = (mempty, constrs)
 
 unifyMany :: [Type] -> [Type] -> Solve Subst
@@ -168,16 +173,16 @@ unifyMany (t1 : ts1) (t2 : ts2) = do
     su1 <- unifies t1 t2
     su2 <- unifyMany (apply su1 ts1) (apply su1 ts2)
     return (su2 `compose` su1)
--- unifyMany t1 t2 = throwError $ ErrUnifyUnsolvable [] -- Fix lang error
-unifyMany t1 t2 = throwError $ ErrUnify t1 t2
+-- unifyMany t1 t2 = throwError $$ ErrUnifyUnsolvable [] -- Fix lang error
+unifyMany t1 t2 = throwError $$ ErrUnify t1 t2
 
 unifies :: Type -> Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return mempty
 unifies (TyVar name) t = name `bind` t
 unifies t (TyVar name) = name `bind` t
 unifies (TyFunc tySs tyS2) (TyFunc tyTs tyT2) = unifyMany (tyS2 : tySs) (tyT2 : tyTs)
---unifies t1 t2 = throwError $ ErrUnifyUnsolvable []
-unifies t1 t2 = throwError $ ErrUnify [t1] [t2]
+--unifies t1 t2 = throwError $$ ErrUnifyUnsolvable []
+unifies t1 t2 = throwError $$ ErrUnify [t1] [t2]
 
 solver :: Unifier -> Solve Subst
 solver (su, constrs) = case constrs of
@@ -189,8 +194,8 @@ solver (su, constrs) = case constrs of
 bind :: String -> Type -> Solve Subst
 bind a t
     | t == TyVar a = return mempty
-    | occursCheck a t = throwError $ ErrCircularUnify a t
-    | otherwise = return $ Subst $ Map.singleton (TyVar a) t
+    | occursCheck a t = throwError $$ ErrCircularUnify a t
+    | otherwise = return $$ Subst $$ Map.singleton (TyVar a) t
 
 occursCheck :: Substitutable a => String -> a -> Bool
 occursCheck a t = (TyVar a) `Set.member` freeTyVars t
@@ -209,7 +214,7 @@ substType tyName tyT tyS = st tyS
         -- st err = error (show err)
 
 applySubst :: [Constraint] -> Type -> Type
-applySubst constrs tyExpr = L.foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyExpr constrs
+applySubst constrs tyExpr = L.foldl' (\ tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyExpr constrs
 
 occursIn :: String -> Type -> Bool
 occursIn tyName ty = occin ty
@@ -219,20 +224,20 @@ occursIn tyName ty = occin ty
         occin TyBool = False
         occin TyUnit = False
         occin (TyVar s) = s == tyName
-        occin (TyTaggedUnion fts) = all occin $ concatMap snd fts
+        occin (TyTaggedUnion fts) = all occin $$ concatMap snd fts
 
 
 substConstraint :: String -> Type -> [Constraint] -> [Constraint]
-substConstraint tyName tyT constrs = fmap (\(tyS1, tyS2) -> (st tyS1, st tyS2)) constrs
+substConstraint tyName tyT constrs = fmap (\ (tyS1, tyS2) -> (st tyS1, st tyS2)) constrs
     where st ty = substType tyName tyT ty
 
 unifySubst :: Type -> Type -> [Constraint] -> ThrowsError [Constraint]
 unifySubst ty (v@(TyVar tyName)) rest
     | ty == v = unify rest
-    | tyName `occursIn` ty = throwError $ ErrCircularUnify tyName ty
+    | tyName `occursIn` ty = throwError $$ ErrCircularUnify tyName ty
     | otherwise = do
         unified <- unify (substConstraint tyName ty rest)
-        return $ (v, ty) : unified
+        return $$ (v, ty) : unified
 
 unify :: [Constraint] -> ThrowsError [Constraint]
 unify constrs = case constrs of
@@ -248,9 +253,9 @@ unify constrs = case constrs of
     (((TyTaggedUnion fts1), (TyTaggedUnion fts2)) : rest) -> do
         let fts1tys = map snd fts1
         let fts2tys = map snd fts2
-        let ftsConstrs = concat $ zipWith (\as bs -> zip as bs) fts1tys fts2tys
+        let ftsConstrs = concat $$ zipWith (\ as bs -> zip as bs) fts1tys fts2tys
         unify (ftsConstrs ++ rest)
-    constrs -> throwError $ ErrUnifyUnsolvable constrs
+    constrs -> throwError $$ ErrUnifyUnsolvable constrs
 
 insertIntoEnv :: String -> Scheme -> Infer ()
 insertIntoEnv name ty = do
@@ -268,7 +273,7 @@ lookupEnv name = do
         Just ty -> do
             t <- instantiate ty
             return t
-        Nothing -> throwError $ ErrTyVarNotFound name e
+        Nothing -> throwError $$ ErrTyVarNotFound name e
 
 inEnv :: String -> Scheme -> Infer ()
 inEnv name scheme = do
@@ -287,8 +292,8 @@ recon expr = case expr of
         case tyTagged of
             (TyTaggedUnion tags) -> do
                 case lookup name tags of
-                    (Just types) -> tell $ zip types tysExprs
-                    Nothing -> throwError $ ErrTyVarNotFound name (Map.empty)
+                    (Just types) -> tell $$ zip types tysExprs
+                    Nothing -> throwError $$ ErrTyVarNotFound name (Map.empty)
         return tyTagged
 
     (ELit _ (LInt _)) -> return TyInt
@@ -302,11 +307,11 @@ recon expr = case expr of
     (EDef _ name args body) -> do
         e <- fmap env get
         funcTy <- fresh
-        inEnv name (Forall [] funcTy)
+        inEnv name ($one funcTy)
         argTys <- replicateM (length args) fresh
-        zipWithM (\n ty -> inEnv n (Forall [] ty)) args argTys
+        zipWithM (\ n ty -> inEnv n ($two ty)) args argTys
         tyBody <- recon body
-        inEnv name (Forall [] $ TyFunc argTys tyBody)
+        inEnv name ($three $$ TyFunc argTys tyBody)
         return TyUnit
 
     (ESeq first second) -> do
@@ -322,44 +327,44 @@ recon expr = case expr of
     (EFunction name args body scope) -> do
         e <- fmap env get
         funcTy <- fresh
-        inEnv name (Forall [] funcTy)
+        inEnv name ($four funcTy)
         argTys <- replicateM (length args) fresh
-        zipWithM (\n ty -> inEnv n (generalize e ty)) args argTys
+        zipWithM (\ n ty -> inEnv n ($five ty)) args argTys
         tyBody <- recon body
-        inEnv name (generalize e $ TyFunc argTys tyBody)
-        return $ TyFunc argTys tyBody
+        inEnv name ($six $$ TyFunc argTys tyBody)
+        return $$ TyFunc argTys tyBody
 
     (EInvoke _ name argExprs) -> do
         argExprTys <- mapM recon argExprs
         func <- lookupEnv name
         case func of
             (TyFunc argTys bodyTy) -> do
-                tell $ zip argTys argExprTys
+                tell $$ zip argTys argExprTys
                 return bodyTy
             (TyVar varName) -> do
                 newVar <- fresh
-                tell $ [(func, (TyFunc argExprTys newVar))]
+                tell $$ [(func, (TyFunc argExprTys newVar))]
                 -- insertIntoEnv varName (Forall [] newVar)
                 return newVar
 
     (EBinexp info op left right) -> do
         tyLeft <- recon left
         tyRight <- recon right
-        tell $ [(tyLeft, TyInt), (tyRight, TyInt)]
-        return $ opTypes op
+        tell $$ [(tyLeft, TyInt), (tyRight, TyInt)]
+        return $$ opTypes op
 
     (EIf _ cond tr fl) -> do
         tyCond <- recon cond
         tyTr <- recon tr
         tyFl <- recon fl
-        tell $ [(tyCond, TyBool), (tyTr, tyFl)]
+        tell $$ [(tyCond, TyBool), (tyTr, tyFl)]
         return tyFl
 -- 
 --     (ECase info expr branches) -> do
 --         tyExpr <- recon expr
 --         union <- tagsToUnionsTy branches
---         TyTaggedUnion fts <- getFts $ fst $ head branches
---         tell $ [(tyExpr, union)]
+--         TyTaggedUnion fts <- getFts $$ fst $$ head branches
+--         tell $$ [(tyExpr, union)]
 --         branchTys branches fts
 --         where getFts (ETag _ name _) = lookupEnv name
 -- 
@@ -370,21 +375,57 @@ opTypes Minus = TyInt
 opTypes Equal = TyBool
 -- 
 -- tagsToUnionsTy :: [(Expr, Expr)] -> Infer Type
--- tagsToUnionsTy branches = lookupEnv $ getname $ head branches
+-- tagsToUnionsTy branches = lookupEnv $$ getname $$ head branches
 --     where getname ((ETag _ name _), _) = name
 -- 
 -- branchTys :: [(Expr, Expr)] -> [(String, [Type])] -> Infer Type
 -- branchTys branches fts = do
 --     (tyT1 : restTys) <- mapM tyLookup branches
---     tell $ map (\ty -> (tyT1, ty)) restTys
+--     tell $$ map (\ ty -> (tyT1, ty)) restTys
 --     return tyT1
 --     where
 --         tyLookup ((ETag _ name args), result) = do
---             tys <- lift $ fieldLookup name fts
---             zipWithM (\(EVar _ n) ty -> insertIntoEnv n ty) args tys
+--             tys <- lift $$ fieldLookup name fts
+--             zipWithM (\ (EVar _ n) ty -> insertIntoEnv n ty) args tys
 --             recon result
 -- 
 -- fieldLookup :: String -> [(String, [Type])] -> ThrowsError [Type]
 -- fieldLookup name tys = case lookup name tys of
 --     Just ty -> return ty
---     Nothing -> throwError $ ErrNotInVariantFields name
+--     Nothing -> throwError $$ ErrNotInVariantFields name
+""")
+
+testfile = """
+def f(h, x) {
+    h(x)
+}
+
+def g(y) {
+    y
+}
+
+g(true)
+g(1)
+
+"""
+
+forall = "Forall []"
+gen = "generalize e"
+
+vals = [forall, gen]
+
+with open("Type.hs", "w") as out:
+    out.write(tmpl.substitute(one=forall, two=forall, three=forall, four=forall, five=forall, six=forall))
+
+with open("test.bow", "w") as out:
+    out.write(testfile)
+
+for a in vals:
+    for b in vals:
+        for c in vals:
+            for d in vals:
+                for e in vals:
+                    for f in vals:
+                        with open("Type.hs", "w") as out:
+                            out.write(tmpl.substitute(one=a, two=b, three=c, four=d, five=e, six=f))
+                        call(["runhaskell", "Main.hs", "test.bow"])

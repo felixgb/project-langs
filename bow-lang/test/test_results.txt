@@ -1,8 +1,11 @@
-result: 1
-path: test001.bow
-
-result: 2
-path: test002.bow
-
-result: 0
-path: test003.bow
+-- result: 1
+-- path: test001.bow
+-- 
+-- result: 2
+-- path: test002.bow
+-- 
+-- result: 0
+-- path: test003.bow
+-- 
+result: unit
+path: test004.bow
