@@ -4,6 +4,7 @@ import Syntax
 
 import qualified Data.List as L
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Control.Monad
 import Control.Monad.Except
@@ -164,6 +165,8 @@ recon expr = case expr of
     (ETaggedUnion _ _ _) -> return TyUnit
 
     (EDef _ name args body) -> do
+        funcTy <- fresh
+        insertIntoEnv name funcTy
         argTys <- replicateM (length args) fresh
         zipWithM (\n ty -> insertIntoEnv n ty) args argTys
         tyBody <- recon body
@@ -198,11 +201,11 @@ recon expr = case expr of
                 insertIntoEnv varName newVar
                 return newVar
 
-    (EBinexp info _ left right) -> do
+    (EBinexp info op left right) -> do
         tyLeft <- recon left
         tyRight <- recon right
         tell $ [(tyLeft, TyInt), (tyRight, TyInt)]
-        return TyInt
+        return $ opTypes op
 
     (EIf _ cond tr fl) -> do
         tyCond <- recon cond
@@ -218,11 +221,12 @@ recon expr = case expr of
         tell $ [(tyExpr, union)]
         branchTys branches fts
         where getFts (ETag _ name _) = lookupEnv name
-        -- simpTy <- simplify tyExpr
-        -- case simpTy of
-        --     (TyTaggedUnion fieldTypes) -> do
-        --         caseType fieldTypes branches
 
+opTypes :: Op -> Type
+opTypes Plus = TyInt
+opTypes Times = TyInt
+opTypes Minus = TyInt
+opTypes Equal = TyBool
 
 tagsToUnionsTy :: [(Expr, Expr)] -> Infer Type
 tagsToUnionsTy branches = lookupEnv $ getname $ head branches
