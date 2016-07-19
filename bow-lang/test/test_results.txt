@@ -6,3 +6,6 @@ path: test002.bow
 
 result: 0
 path: test003.bow
+
+result: 5
+path: test004.bow

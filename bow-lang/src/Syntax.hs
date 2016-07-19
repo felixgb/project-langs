@@ -17,12 +17,14 @@ data Expr
     | EInvoke Info String [Expr]
     | EBinexp Info Op Expr Expr
     | EIf Info Expr Expr Expr
+    | EFor Info Expr Expr Expr
     | ETaggedUnion Info String Type
     | ECase Info Expr [(Expr, Expr)]
     | ETag Info String [Expr]
     | EFold Info Type Expr
     | EUnfold Info Type Expr
-    | EVector (V.Vector Expr)
+    | EVector Info (V.Vector Expr)
+    | EIndex Info String Expr
     deriving (Show, Eq)
 
 data Type
@@ -34,6 +36,7 @@ data Type
     | TyUnit
     | TyTaggedUnion [(String, [Type])]
     | TyRec String Type
+    | TyVec Type
     deriving (Show, Eq)
 
 data Op

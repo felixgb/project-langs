@@ -1,0 +1,7 @@
+def forAddFive(x) {
+    for v in x {
+        v
+    }
+}
+
+forAddFive(vec[1, 2, 3])

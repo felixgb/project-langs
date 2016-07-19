@@ -4,6 +4,8 @@ import Syntax
 
 import Control.Monad.Except
 
+import qualified Data.Vector as V
+
 import Text.Parsec
 import Text.Parsec.Language (emptyDef)
 
@@ -202,6 +204,27 @@ parseIf = do
     fl <- factor
     return $ EIf (infoFrom pos) cond tr fl
 
+parseFor = do
+    pos <- getPosition
+    reserved "for"
+    iter <- factor
+    reserved "in"
+    seq <- factor
+    body <- braces $ sepBy factor (reservedOp ";")
+    return $ EFor (infoFrom pos) iter seq (foldr1 ESeq body)
+
+parseVec = do
+    pos <- getPosition
+    reserved "vec"
+    elems <- brackets $ commaSep factor
+    return $ EVector (infoFrom pos) (V.fromList elems)
+
+parseIndex = do
+    pos <- getPosition
+    name <- ident
+    idx <- brackets factor
+    return $ EIndex (infoFrom pos) name idx
+
 parseTrue = reserved "true" >> (return $ LBool True)
 
 parseFalse = reserved "false" >> (return $ LBool False)
@@ -212,6 +235,9 @@ parseBool = do
     return $ ELit (infoFrom pos) bool
 
 factor = try parseInt
+    <|> try parseFor
+    <|> try parseVec
+    <|> try parseIndex
     <|> try parseTag
     <|> try parseAssign
     <|> try parseBool

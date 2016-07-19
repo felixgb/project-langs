@@ -3,6 +3,7 @@ module Type where
 import Syntax
 
 import qualified Data.List as L
+import qualified Data.Vector as V
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -20,7 +21,6 @@ data NameState = NameState {
     , env :: TypeEnv
     }
                             
-
 type Infer a = (RWST TypeEnv [Constraint] NameState ThrowsError a)
 
 dataToEnv :: TypeEnv -> Expr -> TypeEnv
@@ -75,6 +75,8 @@ occursIn tyName ty = occin ty
         occin TyUnit = False
         occin (TyVar s) = s == tyName
         occin (TyTaggedUnion fts) = all occin $ concatMap snd fts
+        occin (TyVec ty) = occin ty
+        occin other = error (show other)
 
 
 substConstraint :: String -> Type -> [Constraint] -> [Constraint]
@@ -92,7 +94,7 @@ substType tyName tyT tyS = st tyS
         st (TyTaggedUnion fts) = (TyTaggedUnion (map substed fts))
             where
                 substed (name, tys) = (name, map st tys)
-        -- st err = error (show err)
+        st (TyVec ty) = TyVec $ st ty
 
 unifySubst :: Type -> Type -> [Constraint] -> ThrowsError [Constraint]
 unifySubst ty (v@(TyVar tyName)) rest
@@ -110,6 +112,7 @@ unify constrs = case constrs of
     ((TyInt, TyInt) : rest) -> unify rest
     ((TyBool, TyBool) : rest) -> unify rest
     ((TyUnit, TyUnit) : rest) -> unify rest
+    (((TyVec ty1), (TyVec ty2)) : rest) -> unify $ (ty1, ty2) : rest
     (((TyFunc tySs tyS2), (TyFunc tyTs tyT2)) : rest) -> do
         let argConstrs = zip tySs tyTs
         unify ((tyS2, tyT2) : argConstrs ++ rest)
@@ -213,6 +216,38 @@ recon expr = case expr of
         tyFl <- recon fl
         tell $ [(tyCond, TyBool), (tyTr, tyFl)]
         return tyFl
+
+    (EVector info elems) -> if V.null elems then return $ TyVec TyUnit else do
+        tyVec <- V.mapM recon elems
+        tell $ V.toList $ V.map (\t -> (V.head tyVec, t)) (V.tail tyVec)
+        return $ TyVec (V.head tyVec)
+
+    (EIndex info name idx) -> do
+        vecExpr <- lookupEnv name
+        tyIndex <- recon idx
+        tell $ [(tyIndex, TyInt)]
+        case vecExpr of
+            (TyVec elemTy) -> return elemTy
+            (TyVar varName) -> do
+                freshName <- fresh
+                tell $ [(vecExpr, TyVec freshName)]
+                return freshName
+
+    (EFor info iter seq body) -> do
+        tySeq <- recon seq
+        case tySeq of
+            (TyVec elemTy) -> doBody iter elemTy
+            (TyVar name) -> do
+                freshTy <- fresh
+                tell $ [(tySeq, TyVec freshTy)]
+                doBody iter freshTy
+        where 
+            doBody (EVar _ name) ty = do
+                tyIter <- fresh
+                tell $ [(tyIter, ty)]
+                insertIntoEnv name ty
+                recon body
+                return TyUnit
 
     (ECase info expr branches) -> do
         tyExpr <- recon expr
