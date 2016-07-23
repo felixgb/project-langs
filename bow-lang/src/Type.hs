@@ -72,6 +72,7 @@ occursIn tyName ty = occin ty
         occin (TyFunc tys ty2) = (all occin tys) || occin ty2
         occin TyInt = False
         occin TyBool = False
+        occin TyString = False
         occin TyUnit = False
         occin (TyVar s) = s == tyName
         occin (TyTaggedUnion fts) = all occin $ concatMap snd fts
@@ -89,6 +90,7 @@ substType tyName tyT tyS = st tyS
         st (TyFunc tys tyS2) = TyFunc (fmap st tys) (st tyS2)
         st TyInt = TyInt
         st TyBool = TyBool
+        st TyString = TyString
         st TyUnit = TyUnit
         st (v@(TyVar name)) = if name == tyName then tyT else v
         st (TyTaggedUnion fts) = (TyTaggedUnion (map substed fts))
@@ -111,6 +113,7 @@ unify constrs = case constrs of
     ((v@(TyVar tyName), tyT) : rest) -> unifySubst tyT v rest
     ((TyInt, TyInt) : rest) -> unify rest
     ((TyBool, TyBool) : rest) -> unify rest
+    ((TyString, TyString) : rest) -> unify rest
     ((TyUnit, TyUnit) : rest) -> unify rest
     (((TyVec ty1), (TyVec ty2)) : rest) -> unify $ (ty1, ty2) : rest
     (((TyFunc tySs tyS2), (TyFunc tyTs tyT2)) : rest) -> do
@@ -163,6 +166,8 @@ recon expr = case expr of
 
     (ELit _ (LBool _)) -> return TyBool
 
+    (ELit _ (LString _)) -> return TyString
+
     (EUnit _) -> return TyUnit
 
     (ETaggedUnion _ _ _) -> return TyUnit
@@ -203,6 +208,17 @@ recon expr = case expr of
                 tell $ [(func, (TyFunc argExprTys newVar))]
                 insertIntoEnv varName newVar
                 return newVar
+
+    (ECallShell _ command args) -> do
+        commandTy <- recon command
+        argsTy <- recon args
+        tell $ [(commandTy, TyString), (argsTy, TyString)]
+        return TyString
+
+    (EPrint _ arg) -> do
+        argTy <- recon arg
+        tell $ [(argTy, TyString)]
+        return TyUnit
 
     (EBinexp info op left right) -> do
         tyLeft <- recon left

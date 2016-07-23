@@ -11,21 +11,24 @@ import Parser
 import Eval
 import Type
 
-process :: String -> ThrowsError Type
-process inp = do
+parseAndInfer :: String -> ThrowsError Expr
+parseAndInfer inp = do
     parsed <- parseTopLevel inp
     infer parsed
-    -- evalExpr parsed
+    return parsed
 
-foo inp = case runExcept $ process inp of
-    Right val -> putStrLn (show val)
-    Left err -> putStrLn (show err)
+printEval :: Expr -> IO ()
+printEval inp = do
+    evaled <- evalExpr inp
+    case evaled of
+        (Right expr) -> return ()
+        (Left err) -> return ()
 
 main = do
     path <- fmap head getArgs 
     inp <- readFile path
-    case runExcept $ process inp of
-        Right val -> putStrLn (show val)
+    case runExcept $ parseAndInfer inp of
+        Right val -> printEval val
         Left err -> (ppErr err)
 
 ppList :: Show a => [a] -> IO ()

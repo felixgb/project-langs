@@ -14,6 +14,8 @@ data Expr
     | EAssign Info String Expr
     | EFunction String [String] Expr VarEnv
     | EDef Info String [String] Expr
+    | ECallShell Info Expr Expr
+    | EPrint Info Expr
     | EInvoke Info String [Expr]
     | EBinexp Info Op Expr Expr
     | EIf Info Expr Expr Expr
@@ -21,11 +23,11 @@ data Expr
     | ETaggedUnion Info String Type
     | ECase Info Expr [(Expr, Expr)]
     | ETag Info String [Expr]
-    | EFold Info Type Expr
-    | EUnfold Info Type Expr
     | EVector Info (V.Vector Expr)
     | EIndex Info String Expr
     deriving (Show, Eq)
+
+-- builtins = Map.fromList [(print
 
 data Type
     = TyVar String
@@ -34,10 +36,15 @@ data Type
     | TyInt
     | TyBool
     | TyUnit
+    | TyString
     | TyTaggedUnion [(String, [Type])]
     | TyRec String Type
     | TyVec Type
     deriving (Show, Eq)
+
+data Kind
+    = KStar
+    | KArr Kind Kind
 
 data Op
     = Plus
@@ -48,6 +55,7 @@ data Op
 
 data Lit
     = LInt Int
+    | LString String
     | LBool Bool
     deriving (Show, Eq)
 
@@ -64,6 +72,7 @@ data LangErr
     | ErrTyVarNotFound String (Map.Map String Type)
     | ErrCircularUnify String Type
     | ErrUnifyUnsolvable [(Type, Type)]
+    | ErrIndexOutOfBounds Int String
 
 instance Show LangErr where
     show (ErrParse msg) = show msg
@@ -73,6 +82,6 @@ instance Show LangErr where
     show (ErrTyVarNotFound var env) = "Can't find type variable: " ++ var ++ ", env: " ++ (show env)
     show (ErrCircularUnify name ty) = "Circular constraints, var: " ++ name ++ " found in " ++ (show ty)
     show (ErrUnifyUnsolvable tys) = "Unable to unify types: " ++ (show tys)
-
-type ThrowsError = Except LangErr
+    show (ErrIndexOutOfBounds idx name) = "Index out of bounds: " ++ (show idx) ++ ", " ++ name
+type ThrowsError = Except LangErr 
 

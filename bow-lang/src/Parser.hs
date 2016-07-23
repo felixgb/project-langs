@@ -32,6 +32,8 @@ brackets = Tok.brackets lexer
 
 braces = Tok.braces lexer
 
+stringLit = Tok.stringLiteral lexer
+
 -- ident = Tok.identifier lexer
 ident = (Tok.lexeme lexer ci)
     where 
@@ -180,6 +182,11 @@ parseInt = do
     n <- Tok.integer lexer
     return $ ELit (infoFrom pos) (LInt $ fromIntegral n)
 
+parseString = do
+    pos <- getPosition
+    str <- stringLit
+    return $ ELit (infoFrom pos) (LString str)
+
 parseDef = do
     pos <- getPosition
     reserved "def"
@@ -187,6 +194,24 @@ parseDef = do
     params <- parens $ commaSep ident
     body <- braces $ sepBy factor (reservedOp ";") 
     return $ EDef (infoFrom pos) name params (foldr1 ESeq body)
+
+parseCallShell = do
+    pos <- getPosition
+    reserved "sh"
+    (command, args) <- parens inner
+    return $ ECallShell (infoFrom pos) command args
+    where 
+        inner = do
+            c <- factor
+            reservedOp ","
+            as <- factor
+            return (c, as)
+
+parsePrint = do
+    pos <- getPosition
+    reserved "print"
+    arg <- parens factor
+    return $ EPrint (infoFrom pos) arg
 
 parseInvoke = do
     pos <- getPosition
@@ -235,7 +260,10 @@ parseBool = do
     return $ ELit (infoFrom pos) bool
 
 factor = try parseInt
+    <|> try parseString
     <|> try parseFor
+    <|> try parseCallShell
+    <|> try parsePrint
     <|> try parseVec
     <|> try parseIndex
     <|> try parseTag
