@@ -5,6 +5,7 @@ import Syntax
 import Control.Monad.Except
 
 import qualified Data.Vector as V
+import Data.Maybe
 
 import Text.Parsec
 import Text.Parsec.Language (emptyDef)
@@ -31,6 +32,8 @@ parens = Tok.parens lexer
 brackets = Tok.brackets lexer
 
 braces = Tok.braces lexer
+
+angles = Tok.angles lexer
 
 stringLit = Tok.stringLiteral lexer
 
@@ -106,12 +109,17 @@ parseType = parseTyInt
 
 -- Parse Expressions
 
+actuallyUsefulMaybeToList :: Maybe [a] -> [a]
+actuallyUsefulMaybeToList (Just a) = a
+actuallyUsefulMaybeToList Nothing = []
+
 parseTaggedUnion = do
     pos <- getPosition
     reserved "tagged"
     name <- consIdent
+    params <- optionMaybe $ angles $ commaSep parseTyVar
     ty <- braces parseType
-    return $ ETaggedUnion (infoFrom pos) name (insertRec name ty)
+    return $ ETaggedUnion (infoFrom pos) (actuallyUsefulMaybeToList params) name (insertRec name ty)
 
 insertRec :: String -> Type -> Type
 insertRec name ty = if name `occursIn` ty 

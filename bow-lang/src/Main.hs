@@ -17,6 +17,15 @@ parseAndInfer inp = do
     infer parsed
     return parsed
 
+printInfer :: String -> IO ()
+printInfer inp = do
+    case runExcept $ parseTopLevel inp of
+        Right val -> do
+            case runExcept $ infer val of
+                Right x -> putStrLn (show x)
+                Left err -> ppErr err
+        Left err -> print err
+
 printEval :: Expr -> IO ()
 printEval inp = do
     evaled <- evalExpr inp
@@ -27,9 +36,10 @@ printEval inp = do
 main = do
     path <- fmap head getArgs 
     inp <- readFile path
-    case runExcept $ parseAndInfer inp of
-        Right val -> printEval val
-        Left err -> (ppErr err)
+    printInfer inp
+    -- case runExcept $ parseAndInfer inp of
+    --     Right val -> printEval val
+    --     Left err -> (ppErr err)
 
 ppList :: Show a => [a] -> IO ()
 ppList li = mapM_ (putStrLn . show) li
@@ -38,5 +48,8 @@ ppErr :: LangErr -> IO ()
 ppErr (ErrTyVarNotFound var env) = do
     putStrLn $ "Can't find type variable: " ++ var ++ ", env: "
     ppList $ Map.assocs env
+ppErr (ErrUnifyUnsolvable tys) = do
+    putStrLn $ "Cannot unify: "
+    ppList tys
 ppErr err = putStrLn $ show err
 

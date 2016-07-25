@@ -20,7 +20,7 @@ data Expr
     | EBinexp Info Op Expr Expr
     | EIf Info Expr Expr Expr
     | EFor Info Expr Expr Expr
-    | ETaggedUnion Info String Type
+    | ETaggedUnion Info [Type] String Type
     | ECase Info Expr [(Expr, Expr)]
     | ETag Info String [Expr]
     | EVector Info (V.Vector Expr)

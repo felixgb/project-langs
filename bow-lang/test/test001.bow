@@ -1,21 +1,29 @@
-tagged Option {
-    Some(Int),
+tagged Option<A> {
+    Some(A),
     Nothing()
 }
 
-def isThing(x) {
-    case x of {
-        Some(y) -> true;
-        Nothing() -> false;
-    }
+tagged Either<F, A, B> {
+    Left(F A),
+    Right(B)
 }
 
-let y = Some(2)
-// 
-isThing(y)
+Left(Some 2)
 
 // 
-// def main() {
-//     let x = Some(1337);
-//     isThing(x)
+// def isThing(x) {
+//     case x of {
+//         Some(y) -> Left("lol");
+//         Nothing() -> Right(false);
+//     }
 // }
+// 
+// def isThing2(x) {
+//     case x of {
+//         Some(y) -> Left(y);
+//         Nothing() -> Right(true);
+//     }
+// }
+// 
+
+// isThing(y)

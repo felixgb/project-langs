@@ -25,7 +25,7 @@ type Infer a = (RWST TypeEnv [Constraint] NameState ThrowsError a)
 
 dataToEnv :: TypeEnv -> Expr -> TypeEnv
 dataToEnv env expr = case expr of
-    (ETaggedUnion _ name ty) -> Map.union (Map.insert name ty env) $ case ty of
+    (ETaggedUnion _ params name ty) -> Map.union (Map.insert name ty env) $ case ty of
         (TyTaggedUnion constrs) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
         (TyRec name (TyTaggedUnion constrs)) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
         _ -> Map.empty
@@ -79,7 +79,6 @@ occursIn tyName ty = occin ty
         occin (TyVec ty) = occin ty
         occin other = error (show other)
 
-
 substConstraint :: String -> Type -> [Constraint] -> [Constraint]
 substConstraint tyName tyT constrs = fmap (\(tyS1, tyS2) -> (st tyS1, st tyS2)) constrs
     where st ty = substType tyName tyT ty
@@ -101,7 +100,7 @@ substType tyName tyT tyS = st tyS
 unifySubst :: Type -> Type -> [Constraint] -> ThrowsError [Constraint]
 unifySubst ty (v@(TyVar tyName)) rest
     | ty == v = unify rest
-    | tyName `occursIn` ty = throwError $ ErrCircularUnify tyName ty
+    -- | tyName `occursIn` ty = throwError $ ErrCircularUnify tyName ty
     | otherwise = do
         unified <- unify (substConstraint tyName ty rest)
         return $ (v, ty) : unified
@@ -148,6 +147,10 @@ simplify (TyVar name) = do
     simplify x
 simplify ty = return ty
 
+substAllVars :: [Type] -> [Type] -> Type -> Type
+substAllVars vars toSubs subIn = L.foldl' (\orig (v, s) -> substType v s orig) subIn (zip (map name vars) toSubs)
+    where name (TyVar n) = n
+
 recon :: Expr -> Infer Type
 recon expr = case expr of
     (EVar _ name) -> lookupEnv name
@@ -158,9 +161,9 @@ recon expr = case expr of
         case tyTagged of
             (TyTaggedUnion tags) -> do
                 case lookup name tags of
-                    (Just types) -> tell $ zip types tysExprs
+                    -- Types are the type variables of the expression
+                    (Just types) -> return $ substAllVars types tysExprs tyTagged
                     Nothing -> throwError $ ErrTyVarNotFound name (Map.empty)
-        return tyTagged
 
     (ELit _ (LInt _)) -> return TyInt
 
@@ -170,7 +173,7 @@ recon expr = case expr of
 
     (EUnit _) -> return TyUnit
 
-    (ETaggedUnion _ _ _) -> return TyUnit
+    (ETaggedUnion _ _ _ _) -> return TyUnit
 
     (EDef _ name args body) -> do
         funcTy <- fresh
@@ -268,9 +271,9 @@ recon expr = case expr of
     (ECase info expr branches) -> do
         tyExpr <- recon expr
         union <- tagsToUnionsTy branches
-        TyTaggedUnion fts <- getFts $ fst $ head branches
+        oldUnion <- getFts $ fst $ head branches
         tell $ [(tyExpr, union)]
-        branchTys branches fts
+        branchTys branches oldUnion
         where getFts (ETag _ name _) = lookupEnv name
 
 opTypes :: Op -> Type
@@ -283,18 +286,18 @@ tagsToUnionsTy :: [(Expr, Expr)] -> Infer Type
 tagsToUnionsTy branches = lookupEnv $ getname $ head branches
     where getname ((ETag _ name _), _) = name
 
-branchTys :: [(Expr, Expr)] -> [(String, [Type])] -> Infer Type
-branchTys branches fts = do
+branchTys :: [(Expr, Expr)] -> Type -> Infer Type
+branchTys branches u@(TyTaggedUnion fts) = do
     (tyT1 : restTys) <- mapM tyLookup branches
     tell $ map (\ty -> (tyT1, ty)) restTys
     return tyT1
     where
         tyLookup ((ETag _ name args), result) = do
-            tys <- lift $ fieldLookup name fts
+            tys <- lift $ fieldLookup name u
             zipWithM (\(EVar _ n) ty -> insertIntoEnv n ty) args tys
             recon result
 
-fieldLookup :: String -> [(String, [Type])] -> ThrowsError [Type]
-fieldLookup name tys = case lookup name tys of
+fieldLookup :: String -> Type -> ThrowsError [Type]
+fieldLookup name u@(TyTaggedUnion tys) = case lookup name tys of
     Just ty -> return ty
     Nothing -> throwError $ ErrNotInVariantFields name

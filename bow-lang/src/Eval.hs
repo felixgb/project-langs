@@ -49,7 +49,7 @@ eval exp = case exp of
 
     ex@(EUnit info) -> return ex
 
-    (ETaggedUnion _ _ _) -> return $ EUnit DummyInfo
+    (ETaggedUnion _ _ _ _) -> return $ EUnit DummyInfo
 
     (EAssign info name expr) -> do
         expr' <- eval expr
