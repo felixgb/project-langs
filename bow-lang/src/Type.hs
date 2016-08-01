@@ -107,13 +107,6 @@ constraintsExpr ex = do
         Left err -> throwError err
         Right subst -> return $ (constrs, subst, ty, (closeOver $ apply subst ty))
 
--- 
--- infer :: Expr -> ThrowsError Type
--- infer ast = do
---     (tyExpr, constrs) <- inferExpr ast
---     unified <- unify constrs
---     return $ applySubst unified tyExpr
--- 
 instantiate :: Scheme -> Infer Type
 instantiate (Forall xs ty) = do
     names <- mapM (\_ -> fresh) xs
@@ -194,63 +187,6 @@ bind a t
 
 occursCheck :: Substitutable a => String -> a -> Bool
 occursCheck a t = (TyVar a) `Set.member` freeTyVars t
-
-substType :: String -> Type -> Type -> Type
-substType tyName tyT tyS = st tyS
-    where
-        st (TyFunc tys tyS2) = TyFunc (fmap st tys) (st tyS2)
-        st TyInt = TyInt
-        st TyBool = TyBool
-        st TyUnit = TyUnit
-        st (v@(TyVar name)) = if name == tyName then tyT else v
-        st (TyTaggedUnion fts) = (TyTaggedUnion (map substed fts))
-            where
-                substed (name, tys) = (name, map st tys)
-        -- st err = error (show err)
-
-applySubst :: [Constraint] -> Type -> Type
-applySubst constrs tyExpr = L.foldl' (\tyS ((TyVar name), tyC2) -> substType name tyC2 tyS) tyExpr constrs
-
-occursIn :: String -> Type -> Bool
-occursIn tyName ty = occin ty
-    where
-        occin (TyFunc tys ty2) = (all occin tys) || occin ty2
-        occin TyInt = False
-        occin TyBool = False
-        occin TyUnit = False
-        occin (TyVar s) = s == tyName
-        occin (TyTaggedUnion fts) = all occin $ concatMap snd fts
-
-
-substConstraint :: String -> Type -> [Constraint] -> [Constraint]
-substConstraint tyName tyT constrs = fmap (\(tyS1, tyS2) -> (st tyS1, st tyS2)) constrs
-    where st ty = substType tyName tyT ty
-
-unifySubst :: Type -> Type -> [Constraint] -> ThrowsError [Constraint]
-unifySubst ty (v@(TyVar tyName)) rest
-    | ty == v = unify rest
-    | tyName `occursIn` ty = throwError $ ErrCircularUnify tyName ty
-    | otherwise = do
-        unified <- unify (substConstraint tyName ty rest)
-        return $ (v, ty) : unified
-
-unify :: [Constraint] -> ThrowsError [Constraint]
-unify constrs = case constrs of
-    [] -> return []
-    ((tyS, (v@(TyVar tyName))) : rest) -> unifySubst tyS v rest
-    ((v@(TyVar tyName), tyT) : rest) -> unifySubst tyT v rest
-    ((TyInt, TyInt) : rest) -> unify rest
-    ((TyBool, TyBool) : rest) -> unify rest
-    ((TyUnit, TyUnit) : rest) -> unify rest
-    (((TyFunc tySs tyS2), (TyFunc tyTs tyT2)) : rest) -> do
-        let argConstrs = zip tySs tyTs
-        unify ((tyS2, tyT2) : argConstrs ++ rest)
-    (((TyTaggedUnion fts1), (TyTaggedUnion fts2)) : rest) -> do
-        let fts1tys = map snd fts1
-        let fts2tys = map snd fts2
-        let ftsConstrs = concat $ zipWith (\as bs -> zip as bs) fts1tys fts2tys
-        unify (ftsConstrs ++ rest)
-    constrs -> throwError $ ErrUnifyUnsolvable constrs
 
 insertIntoEnv :: String -> Scheme -> Infer ()
 insertIntoEnv name ty = do
