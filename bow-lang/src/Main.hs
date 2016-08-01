@@ -24,11 +24,32 @@ printEval inp = do
         (Right expr) -> return ()
         (Left err) -> return ()
 
+process :: String -> ThrowsError ([Constraint], Subst, Type, Scheme)
+process inp = do
+    parsed <- parseTopLevel inp
+    constraintsExpr parsed
+    -- evalExpr parsed
+
+printConstr :: ([Constraint], Subst, Type, Scheme) -> IO ()
+printConstr (cs, (Subst s), ty, sc) = do
+    putStrLn "Constraints:"
+    mapM_ (putStrLn . show) cs
+    putStrLn "Subst:"
+    mapM_ (putStrLn . show) (Map.assocs s)
+    putStrLn "Type:"
+    putStrLn (show ty)
+    putStrLn "Scheme:"
+    putStrLn (show sc)
+
+foo inp = case runExcept $ process inp of
+    Right val -> putStrLn (show val)
+    Left err -> putStrLn (show err)
+
 main = do
     path <- fmap head getArgs 
     inp <- readFile path
-    case runExcept $ parseAndInfer inp of
-        Right val -> printEval val
+    case runExcept $ process inp of
+        Right val -> printConstr val
         Left err -> (ppErr err)
 
 ppList :: Show a => [a] -> IO ()
@@ -39,4 +60,3 @@ ppErr (ErrTyVarNotFound var env) = do
     putStrLn $ "Can't find type variable: " ++ var ++ ", env: "
     ppList $ Map.assocs env
 ppErr err = putStrLn $ show err
-

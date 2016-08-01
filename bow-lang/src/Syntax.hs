@@ -40,7 +40,10 @@ data Type
     | TyTaggedUnion [(String, [Type])]
     | TyRec String Type
     | TyVec Type
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
+
+data Scheme = Forall [Type] Type
+    deriving (Show)
 
 data Kind
     = KStar
@@ -69,10 +72,11 @@ data LangErr
     | ErrFieldMismatch
     | ErrNotInVariantFields String
     | ErrVarNotFound String
-    | ErrTyVarNotFound String (Map.Map String Type)
+    | ErrTyVarNotFound String (Map.Map String Scheme)
     | ErrCircularUnify String Type
     | ErrUnifyUnsolvable [(Type, Type)]
     | ErrIndexOutOfBounds Int String
+    | ErrUnify [Type] [Type]
 
 instance Show LangErr where
     show (ErrParse msg) = show msg
@@ -83,5 +87,6 @@ instance Show LangErr where
     show (ErrCircularUnify name ty) = "Circular constraints, var: " ++ name ++ " found in " ++ (show ty)
     show (ErrUnifyUnsolvable tys) = "Unable to unify types: " ++ (show tys)
     show (ErrIndexOutOfBounds idx name) = "Index out of bounds: " ++ (show idx) ++ ", " ++ name
-type ThrowsError = Except LangErr 
+    show (ErrUnify t1s t2s) = "Unable to unify types: " ++ (show t1s) ++ (show t2s)
 
+type ThrowsError = Except LangErr 

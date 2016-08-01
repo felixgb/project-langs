@@ -7,5 +7,5 @@ path: test002.bow
 result: 0
 path: test003.bow
 
-result: 5
+result: unit
 path: test004.bow
