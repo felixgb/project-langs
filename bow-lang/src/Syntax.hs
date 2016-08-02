@@ -6,7 +6,7 @@ import qualified Data.Vector as V
 
 type VarEnv = Map.Map String Expr
 
-data Expr
+data Expr 
     = EVar Info String
     | ELit Info Lit
     | ESeq Expr Expr
@@ -29,54 +29,53 @@ data Expr
 
 -- builtins = Map.fromList [(print
 
-data Type
-    = TyVar String
-    | TyFunc [Type] Type
-    | TyVector Type
-    | TyInt
-    | TyBool
-    | TyUnit
-    | TyString
-    | TyTaggedUnion [(String, [Type])]
-    | TyRec String Type
-    | TyVec Type
-    deriving (Show, Eq, Ord)
+data Type = TyVar String
+          | TyFunc [Type] Type
+          | TyVector Type
+          | TyInt
+          | TyBool
+          | TyUnit
+          | TyString
+          | TyTaggedUnion [(String, [Type])]
+          | TyRec String Type
+          | TyVec Type
+          | TyApp Type Type             -- Operator Application
+          | TyAbs Type Kind Type        -- Operator Abstraction
+          deriving (Show, Eq, Ord)
 
 data Scheme = Forall [Type] Type
     deriving (Show)
 
-data Kind
-    = KStar
-    | KArr Kind Kind
+data Kind = KStar
+          | KArr Kind Kind
+          deriving (Show, Eq, Ord)
 
-data Op
-    = Plus
-    | Times
-    | Minus
-    | Equal
-    deriving (Show, Eq)
+data Op = Plus
+        | Times
+        | Minus
+        | Equal
+        deriving (Show, Eq)
 
-data Lit
-    = LInt Int
-    | LString String
-    | LBool Bool
-    deriving (Show, Eq)
+data Lit = LInt Int
+         | LString String
+         | LBool Bool
+         deriving (Show, Eq)
 
-data Info 
-    = Info Int Int
-    | DummyInfo
-    deriving (Show, Eq)
+data Info = Info Int Int
+          | DummyInfo
+          deriving (Show, Eq)
 
-data LangErr
-    = ErrParse String
-    | ErrFieldMismatch
-    | ErrNotInVariantFields String
-    | ErrVarNotFound String
-    | ErrTyVarNotFound String (Map.Map String Scheme)
-    | ErrCircularUnify String Type
-    | ErrUnifyUnsolvable [(Type, Type)]
-    | ErrIndexOutOfBounds Int String
-    | ErrUnify [Type] [Type]
+data LangErr = ErrParse String
+             | ErrFieldMismatch
+             | ErrNotInVariantFields String
+             | ErrVarNotFound String
+             | ErrTyVarNotFound String (Map.Map String Scheme)
+             | ErrCircularUnify String Type
+             | ErrUnifyUnsolvable [(Type, Type)]
+             | ErrIndexOutOfBounds Int String
+             | ErrUnify [Type] [Type]
+             | ErrKindMismatch Kind Kind
+             | ErrExpectedKindArr
 
 instance Show LangErr where
     show (ErrParse msg) = show msg

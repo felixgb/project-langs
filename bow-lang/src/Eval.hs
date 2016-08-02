@@ -13,7 +13,6 @@ import Syntax
 
 type Eval a = ExceptT LangErr (StateT VarEnv IO) a
 
-
 evalExpr :: Expr -> IO (Either LangErr Expr)
 evalExpr expr = runEval emptyEnv (eval expr)
     where emptyEnv = Map.empty

@@ -16,6 +16,24 @@ import Control.Monad.RWS.Strict
 import Control.Monad.State
 import Control.Monad.Identity
 
+type KindEnv = Map.Map String Kind
+
+kindof :: KindEnv -> Type -> ThrowsError Kind
+kindof env ty = case ty of
+    (TyAbs (TyVar name) kX tyBody) -> do
+        let env' = Map.insert name kX env
+        k2 <- kindof env' tyBody
+        return $ KArr kX k2
+
+    (TyApp tyAbs tyParam) -> do
+        kAbs <- kindof env tyAbs
+        kParam <- kindof env tyParam
+        case kAbs of
+            (KArr k1 k2) -> do
+                when (kAbs /= k1) (throwError $ ErrKindMismatch kAbs k1)
+                return k2
+            _ -> throwError $ ErrExpectedKindArr
+
 type TypeEnv = Map.Map String Scheme
 
 type Constraint = (Type, Type)
@@ -35,7 +53,7 @@ instance Substitutable Type where
     apply _ TyInt = TyInt
     apply _ TyBool = TyBool
     apply _ TyUnit = TyUnit
-    apply s (TyFunc tys tyS2) = TyFunc (fmap (apply s) tys) (apply s tyS2)
+    apply s (TyFunc tys tyS2) = TyFunc (apply s tys) (apply s tyS2)
     apply (Subst s) t@(TyVar name) = Map.findWithDefault t t s
     apply s (TyTaggedUnion fts) = (TyTaggedUnion (map substed fts))
             where
@@ -77,12 +95,17 @@ instance Substitutable Constraint where
 --     _ -> env
 -- 
 names :: [String]
-names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
+names = zipWith (\c n -> (show n)) (repeat "a") (iterate (+1) 1)
 
 fresh :: Infer Type
 fresh = do
     s <- get
     put s { count = count s + 1 }
+    return $ TyVar (names !! count s)
+
+current :: Infer Type
+current = do
+    s <- get
     return $ TyVar (names !! count s)
 
 initNameState ::TypeEnv -> NameState
@@ -103,19 +126,9 @@ infer ex = case inferExpr Map.empty ex of
 constraintsExpr :: Expr -> ThrowsError ([Constraint], Subst, Type, Scheme)
 constraintsExpr ex = do
     (ty, constrs) <- runInfer Map.empty (recon ex)
-    case runSolve constrs of
+    case runSolve constrs  of
         Left err -> throwError err
         Right subst -> return $ (constrs, subst, ty, (closeOver $ apply subst ty))
-
-instantiate :: Scheme -> Infer Type
-instantiate (Forall xs ty) = do
-    names <- mapM (\_ -> fresh) xs
-    let s = Subst $ Map.fromList $ zip xs names
-    return $ apply s ty
-
-generalize :: TypeEnv -> Type -> Scheme
-generalize env t = Forall xs t
-    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
 
 inferExpr :: TypeEnv -> Expr -> Either LangErr Scheme
 inferExpr env ex = case runExcept $ runInfer env (recon ex) of
@@ -140,6 +153,7 @@ normalize (Forall _ body) = Forall (map snd ord) (normtype body)
             Nothing -> error "ty var not in sig"
         normtype TyInt = TyInt
         normtype TyBool = TyBool
+        normtype TyUnit = TyUnit
 
 type Unifier = (Subst, [Constraint])
 
@@ -188,6 +202,16 @@ bind a t
 occursCheck :: Substitutable a => String -> a -> Bool
 occursCheck a t = (TyVar a) `Set.member` freeTyVars t
 
+instantiate :: Scheme -> Infer Type
+instantiate (Forall xs ty) = do
+    names <- mapM (\_ -> fresh) xs
+    let s = Subst $ Map.fromList $ zip xs names
+    return $ apply s ty
+
+generalize :: TypeEnv -> Type -> Scheme
+generalize env t = Forall xs t
+    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
+
 insertIntoEnv :: String -> Scheme -> Infer ()
 insertIntoEnv name ty = do
     s <- get
@@ -197,12 +221,10 @@ insertIntoEnv name ty = do
 
 lookupEnv :: String -> Infer Type
 lookupEnv name = do
-    s <- get
-    let e = env s
+    e <- fmap env get
     case Map.lookup name e of
-        --(Just (TyRec name ty)) -> return ty
-        Just ty -> do
-            t <- instantiate ty
+        Just sc -> do
+            t <- instantiate sc
             return t
         Nothing -> throwError $ ErrTyVarNotFound name e
 
@@ -239,13 +261,15 @@ recon expr = case expr of
 
     (EDef _ name args body) -> do
         e <- fmap env get
-        funcTy <- fresh
-        inEnv name (Forall [] funcTy)
-        argTys <- replicateM (length args) fresh
-        zipWithM (\n ty -> inEnv n (Forall [] ty)) args argTys
+        -- funcTy <- fresh
+        -- inEnv name (generalize e funcTy)
+        argTys <- mapM (\_ -> fresh) args
+        -- error $ show argTys
+        zipWithM (\n ty -> insertIntoEnv n (generalize e ty)) args argTys
+        e2 <- fmap env get
         tyBody <- recon body
-        inEnv name (Forall [] $ TyFunc argTys tyBody)
-        return TyUnit
+        inEnv name (generalize e2 $ TyFunc argTys tyBody)
+        return $ TyFunc argTys tyBody
 
     (ESeq first second) -> do
         recon first
@@ -256,17 +280,17 @@ recon expr = case expr of
         e <- fmap env get
         inEnv name (generalize e tyExpr)
         return TyUnit
-
-    (EFunction name args body scope) -> do
-        e <- fmap env get
-        funcTy <- fresh
-        inEnv name (Forall [] funcTy)
-        argTys <- replicateM (length args) fresh
-        zipWithM (\n ty -> inEnv n (generalize e ty)) args argTys
-        tyBody <- recon body
-        inEnv name (generalize e $ TyFunc argTys tyBody)
-        return $ TyFunc argTys tyBody
-
+-- 
+--     (EFunction name args body scope) -> do
+--         e <- fmap env get
+--         funcTy <- fresh
+--         inEnv name (generalize e funcTy)
+--         argTys <- replicateM (length args) fresh
+--         zipWithM (\n ty -> inEnv n (generalize e ty)) args argTys
+--         tyBody <- recon body
+--         inEnv name (generalize e $ TyFunc argTys tyBody)
+--         return $ TyFunc argTys tyBody
+-- 
     (EInvoke _ name argExprs) -> do
         argExprTys <- mapM recon argExprs
         func <- lookupEnv name
@@ -275,9 +299,9 @@ recon expr = case expr of
                 tell $ zip argTys argExprTys
                 return bodyTy
             (TyVar varName) -> do
+                oldVar <- current
                 newVar <- fresh
                 tell $ [(func, (TyFunc argExprTys newVar))]
-                -- insertIntoEnv varName (Forall [] newVar)
                 return newVar
 
     (ECallShell _ command args) -> do
@@ -292,6 +316,7 @@ recon expr = case expr of
         return TyUnit
 
     (EBinexp info op left right) -> do
+        e <- fmap env get
         tyLeft <- recon left
         tyRight <- recon right
         tell $ [(tyLeft, TyInt), (tyRight, TyInt)]

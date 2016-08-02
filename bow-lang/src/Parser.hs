@@ -281,7 +281,6 @@ parseDefs = do
     defs <- many (factor)
     return defs
 
-
 contents p = do
     Tok.whiteSpace lexer
     r <- p

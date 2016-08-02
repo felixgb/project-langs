@@ -1,0 +1,17 @@
+def f(g, x) {
+    (g(x) + 1)
+}
+
+
+def g(x) {
+    x
+}
+
+def z(j) {
+    j
+}
+
+
+g(1)
+g(true)
+f(g, 1)
