@@ -85,10 +85,10 @@ fresh = do
     put s { count = count s + 1 }
     return $ TyVar (names !! count s)
 
-lastVar :: Infer Type
-lastVar = do
+current :: Infer Type
+current = do
     s <- get
-    return $ TyVar (names !! ((count s) - 2))   -- lol
+    return $ TyVar (names !! count s)
 
 initNameState ::TypeEnv -> NameState
 initNameState e = NameState { count = 0, env = e }
@@ -251,26 +251,22 @@ recon expr = case expr of
 
     (EDef _ name args body) -> do
         argTys <- mapM (\_ -> fresh) args
-        t2 <- fresh
-        let tf = (TyFunc argTys t2)
-        inEnv name (Forall [] tf)
+        funcTy <- fresh
+        let foo = Forall [] (TyFunc argTys funcTy)
+        inEnv name foo
         zipWithM (\n ty -> inEnv n $ Forall [] ty) args argTys
         tyBody <- recon body
         mapM_ outEnv args
-        outEnv name
+        tell $ [(funcTy, tyBody)]
         e <- fmap env get
-        tell $ [(t2, tyBody)]
-        -- error $ show $ 
-        let funcTy' = generalize e $ TyFunc argTys tyBody
-        inEnv name funcTy'
+        error $ show env
+        error $ show $ Set.toList $ freeTyVars foo `
+        -- let funcTy' = Forall [TyVar "a1"] foo
+        -- let funcTy' = generalize e funcTy
+        -- inEnv name funcTy'
+        -- e2 <- fmap env get
+        -- inEnv name (Forall (Set.toList $ freeTyVars tyBody) $ TyFunc argTys tyBody)
         return $ TyFunc argTys tyBody
-
-    (EInvoke _ name argExprs) -> do
-        argExprTys <- mapM recon argExprs
-        func <- lookupEnv name
-        newVar <- fresh
-        tell $ [((TyFunc argExprTys newVar), func)]
-        return newVar
 
     (ESeq first second) -> do
         recon first
@@ -281,6 +277,23 @@ recon expr = case expr of
         e <- fmap env get
         inEnv name (generalize e tyExpr)
         return TyUnit
+-- 
+--     (EFunction name args body scope) -> do
+--         e <- fmap env get
+--         funcTy <- fresh
+--         inEnv name (generalize e funcTy)
+--         argTys <- replicateM (length args) fresh
+--         zipWithM (\n ty -> inEnv n (generalize e ty)) args argTys
+--         tyBody <- recon body
+--         inEnv name (generalize e $ TyFunc argTys tyBody)
+--         return $ TyFunc argTys tyBody
+-- 
+    (EInvoke _ name argExprs) -> do
+        argExprTys <- mapM recon argExprs
+        func <- lookupEnv name
+        newVar <- fresh
+        tell $ [(func, (TyFunc argExprTys newVar))]
+        return newVar
 
     (ECallShell _ command args) -> do
         commandTy <- recon command

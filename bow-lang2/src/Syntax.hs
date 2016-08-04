@@ -4,51 +4,32 @@ import Control.Monad.Except
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 
-type VarEnv = Map.Map String Expr
-
 data Expr 
-    = EVar Info String
-    | ELit Info Lit
+    = EVar String
+    | EInvoke Expr [Type] [Expr]
+    | EInt Int
+    | EBool Bool
     | ESeq Expr Expr
-    | EUnit Info
-    | EAssign Info String Expr
-    | EFunction String [String] Expr VarEnv
-    | EDef Info String [String] Expr
-    | ECallShell Info Expr Expr
-    | EPrint Info Expr
-    | EInvoke Info String [Expr]
-    | EBinexp Info Op Expr Expr
-    | EIf Info Expr Expr Expr
-    | EFor Info Expr Expr Expr
-    | ETaggedUnion Info String Type
-    | ECase Info Expr [(Expr, Expr)]
-    | ETag Info String [Expr]
-    | EVector Info (V.Vector Expr)
-    | EIndex Info String Expr
+    | EAssign String Type Expr
+    | EBinop Op Expr Expr
+    | FunDecl String [String] [(String, Type)] Type Expr
+    | TypeDecl String [String] Type
     deriving (Show, Eq)
 
 -- builtins = Map.fromList [(print
 
-data Type = TyVar String
-          | TyFunc [Type] Type
-          | TyVector Type
-          | TyInt
-          | TyBool
-          | TyUnit
-          | TyString
-          | TyTaggedUnion [(String, [Type])]
-          | TyRec String Type
-          | TyVec Type
-          | TyApp Type Type             -- Operator Application
-          | TyAbs Type Kind Type        -- Operator Abstraction
-          deriving (Show, Eq, Ord)
+data Type
+    = TyVar String              -- Type Identifier
+    | TyPoly [String] Type      -- Polymorphic type
+    | TyApp Tycon [Type]
+    deriving (Show, Eq, Ord)    
 
-data Scheme = Forall [Type] Type
-    deriving (Show, Eq, Ord)
-
-data Kind = KStar
-          | KArr Kind Kind
-          deriving (Show, Eq, Ord)
+data Tycon
+    = TyInt
+    | TyBool
+    | TyUnit
+    | TyArrow
+    deriving (Show, Eq, Ord)    
 
 data Op = Plus
         | Times
@@ -69,23 +50,22 @@ data LangErr = ErrParse String
              | ErrFieldMismatch
              | ErrNotInVariantFields String
              | ErrVarNotFound String
-             | ErrTyVarNotFound String (Map.Map String Scheme)
              | ErrCircularUnify String Type
              | ErrUnifyUnsolvable [(Type, Type)]
              | ErrIndexOutOfBounds Int String
              | ErrUnify [Type] [Type]
-             | ErrKindMismatch Kind Kind
              | ErrExpectedKindArr
+             | ErrDefault String
 
 instance Show LangErr where
     show (ErrParse msg) = show msg
     show (ErrFieldMismatch) = "field mismatch"
     show (ErrNotInVariantFields msg) = "Not in union fields: " ++ msg
     show (ErrVarNotFound var ) = "Can't find variable: " ++ var
-    show (ErrTyVarNotFound var env) = "Can't find type variable: " ++ var ++ ", env: " ++ (show env)
     show (ErrCircularUnify name ty) = "Circular constraints, var: " ++ name ++ " found in " ++ (show ty)
     show (ErrUnifyUnsolvable tys) = "Unable to unify types: " ++ (show tys)
     show (ErrIndexOutOfBounds idx name) = "Index out of bounds: " ++ (show idx) ++ ", " ++ name
     show (ErrUnify t1s t2s) = "Unable to unify types: " ++ (show t1s) ++ (show t2s)
+    show (ErrDefault msg) = msg
 
 type ThrowsError = Except LangErr 

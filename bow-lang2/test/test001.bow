@@ -1,0 +1,7 @@
+def f<E>(x: E): E = {
+    x
+}
+
+def g<Z>(z: Z): Int = {
+    call f<Int>(2)
+}

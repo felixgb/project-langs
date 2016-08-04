@@ -1,17 +1,12 @@
-def f(g, x) {
-    (g(x) + 1)
+def h(y) {
+    y
 }
 
-
-def g(x) {
-    x
+def k(x) {
+    h(x)
 }
 
-def z(j) {
-    j
-}
+h(1)
+h(true)
 
-
-g(1)
-g(true)
-f(g, 1)
+k(1)

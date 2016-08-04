@@ -1,0 +1,52 @@
+module Main where
+
+import Control.Monad.Except
+
+import System.Environment
+
+import qualified Data.Map.Strict as Map
+
+import Syntax
+import Parser
+import Type
+-- 
+-- parseAndInfer :: String -> ThrowsError Expr
+-- parseAndInfer inp = do
+--     parsed <- parseTopLevel inp
+--     infer parsed
+--     return parsed
+-- 
+-- printEval :: Expr -> IO ()
+-- printEval inp = do
+--     evaled <- evalExpr inp
+--     case evaled of
+--         (Right expr) -> return ()
+--         (Left err) -> return ()
+-- 
+process :: String -> ThrowsError (Type, [Constraint])
+process inp = do
+    parsed <- parseTopLevel inp
+    inferred <- inferExpr parsed
+    return inferred
+-- 
+-- printConstr :: ([Constraint], Subst, Type, Scheme) -> IO ()
+-- printConstr (cs, (Subst s), ty, sc) = do
+--     putStrLn "Constraints:"
+--     mapM_ (putStrLn . show) cs
+--     putStrLn "Subst:"
+--     mapM_ (putStrLn . show) (Map.assocs s)
+--     putStrLn "Type:"
+--     putStrLn (show ty)
+--     putStrLn "Scheme:"
+--     putStrLn (show sc)
+-- 
+-- foo inp = case runExcept $ process inp of
+--     Right val -> putStrLn (show val)
+--     Left err -> putStrLn (show err)
+-- 
+main = do
+    path <- fmap head getArgs 
+    inp <- readFile path
+    case runExcept $ process inp of
+        Right val -> putStrLn (show val)
+        Left err -> putStrLn (show err)

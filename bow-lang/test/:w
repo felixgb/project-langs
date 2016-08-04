@@ -1,0 +1,11 @@
+def f(g, x) {
+    g(x)
+}
+
+def h(y) {
+    y
+}
+
+f(h, true)
+
+h(2)
