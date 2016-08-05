@@ -254,12 +254,15 @@ parseTrue = reserved "true" >> (return $ LBool True)
 
 parseFalse = reserved "false" >> (return $ LBool False)
 
+parseUnit = reserved "unit" >> (return $ EUnit DummyInfo)
+
 parseBool = do
     pos <- getPosition
     bool <- parseTrue <|> parseFalse
     return $ ELit (infoFrom pos) bool
 
 factor = try parseInt
+    <|> try parseUnit
     <|> try parseString
     <|> try parseFor
     <|> try parseCallShell

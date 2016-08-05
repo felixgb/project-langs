@@ -6,7 +6,13 @@ def k(x) {
     h(x)
 }
 
-h(1)
-h(true)
+def f(g, z) {
+    g(z)
+}
 
+unit
+
+k(true)
 k(1)
+
+f(h, 1)

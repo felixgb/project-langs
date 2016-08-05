@@ -192,7 +192,7 @@ instantiate (Forall xs ty) = do
 
 generalize :: TypeEnv -> Type -> Scheme
 generalize env t = Forall xs t
-    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
+    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env `Set.difference` (Set.fromList [])
     -- where xs = error $ show $ freeTyVars t `Set.difference` freeTyVars env
 
 insertIntoEnv :: String -> Scheme -> Infer ()
@@ -245,7 +245,9 @@ recon expr = case expr of
 
     (ELit _ (LString _)) -> return TyString
 
-    (EUnit _) -> return TyUnit
+    (EUnit _) -> do
+        e <- fmap env get
+        error $ show e
 
     (ETaggedUnion _ _ _) -> return TyUnit
 
@@ -260,8 +262,10 @@ recon expr = case expr of
         outEnv name
         e <- fmap env get
         tell $ [(t2, tyBody)]
+        tell $ [(tyBody, t2)]
         -- error $ show $ 
-        let funcTy' = generalize e $ TyFunc argTys tyBody
+        let funcTy' = generalize e $ TyFunc argTys tyBody -- Should be tf?
+        -- let funcTy' = Forall [TyVar "a1"] $ TyFunc argTys tyBody -- Should be tf?
         inEnv name funcTy'
         return $ TyFunc argTys tyBody
 
@@ -269,8 +273,14 @@ recon expr = case expr of
         argExprTys <- mapM recon argExprs
         func <- lookupEnv name
         newVar <- fresh
-        tell $ [((TyFunc argExprTys newVar), func)]
-        return newVar
+        e <- fmap env get
+        tell $ [(func, TyFunc argExprTys newVar)]
+        -- If invoke is called and lookup returns a var, then that var must not
+        -- be instanciated. Instead its type is monomorphic
+        case runSolve [(func, TyFunc argExprTys newVar)] of
+            Left err -> throwError err
+            Right s -> return $ apply s newVar
+        --return newVar
 
     (ESeq first second) -> do
         recon first
