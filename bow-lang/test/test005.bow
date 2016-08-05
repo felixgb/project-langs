@@ -2,17 +2,12 @@ def h(y) {
     y
 }
 
-def k(x) {
-    h(x)
+def f(g, a, b) {
+    g(a);
+    g(b)
 }
 
-def f(g, z) {
-    g(z)
-}
+h(1)
+h(true)
 
-unit
-
-k(true)
-k(1)
-
-f(h, 1)
+f(h, 1, true)

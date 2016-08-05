@@ -107,8 +107,9 @@ infer ex = case inferExpr Map.empty ex of
 
 constraintsExpr :: Expr -> ThrowsError ([Constraint], Subst, Type, Scheme)
 constraintsExpr ex = do
-    (ty, constrs) <- runInfer Map.empty (recon ex)
-    case runSolve constrs  of
+    (ty, _, constrs) <- runMkConstr ex
+    -- (ty, constrs) <- runInfer Map.empty (recon ex)
+    case runSolve constrs of
         Left err -> throwError err
         Right subst -> return $ (constrs, subst, ty, (closeOver $ apply subst ty))
 
@@ -225,6 +226,86 @@ outEnv name = do
     let newEnv = Map.delete name oldEnv
     put s { env = newEnv }
 
+fresh' :: Constr Type
+fresh' = do
+    s <- get
+    put s { index = index s + 1 }
+    return $ TyVar (names !! index s)
+
+instantiate' :: Scheme -> Constr Type
+instantiate' (Forall xs ty) = do
+    names <- mapM (\_ -> fresh') xs
+    let s = Subst $ Map.fromList (zip xs names)
+    return $ apply s ty
+
+lookupVar :: String -> TypeEnv -> Constr Type
+lookupVar name env = case Map.lookup name env of
+    Just sc -> do
+        t <- instantiate' sc
+        return t
+    Nothing -> throwError $ ErrTyVarNotFound name env
+
+solveConstrs :: [Constraint] -> Type -> Constr Type
+solveConstrs constrs ty = case runSolve constrs  of
+    Left err -> throwError err
+    Right s -> return $ apply s ty
+
+data NamesSupply = NamesSupply {
+    index :: Int
+}
+
+initSupply :: NamesSupply
+initSupply = NamesSupply { index = 0 }
+
+type Constr a = StateT NamesSupply ThrowsError a 
+
+runMkConstr :: Expr -> ThrowsError (Type, TypeEnv, [Constraint])
+runMkConstr ex = evalStateT (mkConstrs ex Map.empty []) initSupply
+
+getFirst3 :: (a, b, c) -> a
+getFirst3 (a, b, c) = a
+
+getThird3 :: (a, b, c) -> c
+getThird3 (a, b, c) = c
+
+mkConstrs :: Expr -> TypeEnv -> [Constraint] -> Constr (Type, TypeEnv, [Constraint])
+mkConstrs expr env constrs = case expr of
+
+    (EVar _ name) -> do
+        instanciated <- lookupVar name env
+        return (instanciated, env, constrs)
+
+    (ELit _ (LInt _)) -> return (TyInt, env, constrs)
+
+    (ELit _ (LBool _)) -> return (TyBool, env, constrs)
+
+    (EUnit _) -> do
+        error $ show env
+
+    (EDef _ name args body) -> do
+        argTys <- mapM (\_ -> fresh') args
+        t2 <- fresh'
+        let tf = (TyFunc argTys t2)
+        let env' = Map.insert name (Forall [] tf) env
+        let env'' = Map.unions $ zipWith (\n ty -> Map.insert n (Forall [] ty) env') args argTys
+        (tyBody, _, bodyContrs) <- mkConstrs body env'' constrs
+        funcTy <- solveConstrs (bodyContrs ++ constrs) (TyFunc argTys tyBody)
+        let funcTy' = generalize env funcTy
+        let env''' = Map.insert name funcTy' env
+        return ((TyFunc argTys tyBody), env''', bodyContrs ++ constrs)
+
+    (EInvoke _ name argExprs) -> do
+        argResults <- mapM (\ex -> mkConstrs ex env constrs) argExprs
+        let argExprTys = map getFirst3 argResults
+        let argConstrs = concatMap getThird3 argResults
+        func <- lookupVar name env
+        newVar <- fresh'
+        return (newVar, env, (func, TyFunc argExprTys newVar) : constrs ++ argConstrs)
+
+    (ESeq t1 t2) -> do
+        (tyT1, env', constrs1) <- mkConstrs t1 env constrs
+        mkConstrs t2 env' constrs1
+
 recon :: Expr -> Infer Type
 recon expr = case expr of
     (EVar _ name) -> lookupEnv name
@@ -277,6 +358,7 @@ recon expr = case expr of
         tell $ [(func, TyFunc argExprTys newVar)]
         -- If invoke is called and lookup returns a var, then that var must not
         -- be instanciated. Instead its type is monomorphic
+        -- must be rank one. etc etc
         case runSolve [(func, TyFunc argExprTys newVar)] of
             Left err -> throwError err
             Right s -> return $ apply s newVar
