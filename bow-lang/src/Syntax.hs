@@ -16,6 +16,7 @@ data Expr
     | EDef Info String [String] Expr
     | ECallShell Info Expr Expr
     | EPrint Info Expr
+    | ETyDef String [Type] Type
     | EInvoke Info String [Expr]
     | EBinexp Info Op Expr Expr
     | EIf Info Expr Expr Expr
@@ -27,55 +28,63 @@ data Expr
     | EIndex Info String Expr
     deriving (Show, Eq)
 
--- builtins = Map.fromList [(print
+-- builtins  Map.fromList [(print
 
-data Type = TyVar String
-          | TyFunc [Type] Type
-          | TyVector Type
-          | TyInt
-          | TyBool
-          | TyUnit
-          | TyString
-          | TyTaggedUnion [(String, [Type])]
-          | TyRec String Type
-          | TyVec Type
-          | TyApp Type Type             -- Operator Application
-          | TyAbs Type Kind Type        -- Operator Abstraction
-          deriving (Show, Eq, Ord)
-
-data Scheme = Forall [Type] Type
+data Type 
+    = TyVar String
+    | TyFunc [Type] Type
+    | TyVector Type
+    | TyInt
+    | TyBool
+    | TyUnit
+    | TyString
+    | TyTaggedUnion [(String, [Type])]
+    | TyRec String Type
+    | TyVec Type
+    | TyRecord [(String, Type)]
+    | TyApp Type Type             -- Operator Application
+    | TyAbs Type Type        -- Operator Abstraction
+    | Forall [Type] Type
     deriving (Show, Eq, Ord)
 
-data Kind = KStar
-          | KArr Kind Kind
-          deriving (Show, Eq, Ord)
+-- data Scheme = Forall [Type] Type
+--     deriving (Show, Eq, Ord)
 
-data Op = Plus
-        | Times
-        | Minus
-        | Equal
-        deriving (Show, Eq)
+data Kind 
+    = KStar
+    | KArr Kind Kind
+    deriving (Show, Eq, Ord)
 
-data Lit = LInt Int
-         | LString String
-         | LBool Bool
-         deriving (Show, Eq)
+data Op 
+    = Plus
+    | Times
+    | Minus
+    | Equal
+    deriving (Show, Eq)
 
-data Info = Info Int Int
-          | DummyInfo
-          deriving (Show, Eq)
+data Lit 
+    = LInt Int
+    | LString String
+    | LBool Bool
+    deriving (Show, Eq)
 
-data LangErr = ErrParse String
-             | ErrFieldMismatch
-             | ErrNotInVariantFields String
-             | ErrVarNotFound String
-             | ErrTyVarNotFound String (Map.Map String Scheme)
-             | ErrCircularUnify String Type
-             | ErrUnifyUnsolvable [(Type, Type)]
-             | ErrIndexOutOfBounds Int String
-             | ErrUnify [Type] [Type]
-             | ErrKindMismatch Kind Kind
-             | ErrExpectedKindArr
+data Info 
+    = Info Int Int
+    | DummyInfo
+    deriving (Show, Eq)
+
+data LangErr 
+    = ErrParse String
+    | ErrFieldMismatch
+    | ErrNotInVariantFields String
+    | ErrVarNotFound String
+    | ErrTyVarNotFound String (Map.Map String Type)
+    | ErrCircularUnify String Type
+    | ErrUnifyUnsolvable [(Type, Type)]
+    | ErrIndexOutOfBounds Int String
+    | ErrUnify [Type] [Type]
+    | ErrKindMismatch Kind Kind
+    | ErrExpectedKindArr
 
 instance Show LangErr where
     show (ErrParse msg) = show msg

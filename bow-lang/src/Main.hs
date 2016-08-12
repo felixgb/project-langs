@@ -11,12 +11,6 @@ import Parser
 import Eval
 import Type
 
-parseAndInfer :: String -> ThrowsError Expr
-parseAndInfer inp = do
-    parsed <- parseTopLevel inp
-    infer parsed
-    return parsed
-
 printEval :: Expr -> IO ()
 printEval inp = do
     evaled <- evalExpr inp
@@ -24,13 +18,13 @@ printEval inp = do
         (Right expr) -> return ()
         (Left err) -> return ()
 
-process :: String -> ThrowsError ([Constraint], Subst, Type, Scheme)
+process :: String -> ThrowsError ([Constraint], Subst, Type, Type)
 process inp = do
     parsed <- parseTopLevel inp
     constraintsExpr parsed
     -- evalExpr parsed
 
-printConstr :: ([Constraint], Subst, Type, Scheme) -> IO ()
+printConstr :: ([Constraint], Subst, Type, Type) -> IO ()
 printConstr (cs, (Subst s), ty, sc) = do
     putStrLn "Constraints:"
     mapM_ (putStrLn . show) cs

@@ -77,15 +77,6 @@ parseTyBool = reserved "Bool" >> return TyBool
 
 parseTyUnit = reserved "Unit" >> return TyUnit
 
-parseTyUnion = do
-    constructors <- sepBy1 parseConstructor (reservedOp ",")
-    return $ TyTaggedUnion constructors
-    where
-        parseConstructor = do
-            name <- consIdent
-            tys <- parens $ commaSep parseType
-            return (name, tys)
-
 parseTyVar = do
     tyVar <- consIdent
     return $ TyVar tyVar
@@ -97,13 +88,50 @@ parseTyRec = do
     ty <- parseType
     return $ TyRec tyVar ty
 
-parseType = parseTyInt
-    <|> parseTyBool
-    <|> parseTyUnit
-    <|> parseTyRec
-    <|> try parseTyUnion
-    <|> try parseTyVar
+parseTyApp = do
+    tys <- many1 parseType
+    return $ foldr1 TyApp tys
 
+parseTyDec = do
+    reserved "type"
+    name <- consIdent
+    params <- many $ parseTyVar
+    reservedOp "="
+    ty <- parseType
+    return $ ETyDef name params ty
+
+parseTyUnion = do
+    constructors <- braces $ sepBy1 parseConstructor (reservedOp "|")
+    return $ TyTaggedUnion constructors
+    where
+        parseConstructor = do
+            name <- consIdent
+            tys <- parens $ commaSep parseType
+            return (name, tys)
+
+parseTyRecord = do
+    fields <- braces $ commaSep parseField
+    return $ TyRecord fields
+    where
+        parseField = do
+            name <- consIdent
+            reservedOp ":"
+            ty <- parseType
+            return (name, ty)
+
+parseType = try parseTyRecord
+    <|> try parseTyUnion
+    <|> parseTyUnit
+    <|> parseTyVar
+    <|> parens parseTyApp
+
+-- parseType = parseTyInt
+--     <|> parseTyBool
+--     <|> parseTyUnit
+--     <|> parseTyRec
+--     <|> try parseTyUnion
+--     <|> try parseTyVar
+-- 
 -- Parse Expressions
 
 parseTaggedUnion = do
@@ -262,6 +290,7 @@ parseBool = do
     return $ ELit (infoFrom pos) bool
 
 factor = try parseInt
+    <|> try parseTyDec
     <|> try parseUnit
     <|> try parseString
     <|> try parseFor

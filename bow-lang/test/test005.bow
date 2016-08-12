@@ -3,8 +3,7 @@ def h(y) {
 }
 
 def f(g, a, b) {
-    g(a);
-    g(b)
+    g(a)
 }
 
 h(1)
