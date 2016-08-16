@@ -259,7 +259,7 @@ mkConstrs expr env constrs = case expr of
         tyTagged <- lift $ lookupEnv name env
         tyExprs <- mapM (\e -> mkConstrs e env constrs) exprs
         -- evaluate the types here, and return the result with the actual type
-        -- substituted
+        -- substituted, as much as possible
         let app = foldl TyApp tyTagged (map getFirst3 tyExprs)
         return (app, env, constrs)
 
@@ -279,10 +279,14 @@ mkConstrs expr env constrs = case expr of
             (ETag _ name exprs) -> do
                 newVars <- mapM (\_ -> fresh') exprs
                 let env'' = Map.union env' $ Map.fromList $ zip (map (\(EVar _ name) -> name) exprs) (map (Forall []) newVars)
+                -- can't evaluate braches as tags, cause they don't unify...
+                -- Fixing the evaluation of Tag would fix this
                 (tyBranches, _, _) <- mkConstrs tag1 env'' constrs
                 let exprConstr = (tyExpr, tyBranches)
+                (tyEx, env''', constrs'') <- mkConstrs ex1 env'' constrs'
+                -- need unify all branches!
                 -- error $ show exprConstr
-                return (TyUnit, env', exprConstr : constrs')
+                return (tyEx, env''', exprConstr : constrs'')
 
 -- recon :: Expr -> Infer Type
 -- recon expr = case expr of

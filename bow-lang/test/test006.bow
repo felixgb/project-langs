@@ -4,8 +4,9 @@ type Opt A = {Some(A) | Nothing()}
 
 def f(x) {
     case x of {
-        Left(y) -> y;
+        Some(y) -> y;
+        Nothing() -> false;
     }
 }
 
-Left(true)
+f(Nothing())
