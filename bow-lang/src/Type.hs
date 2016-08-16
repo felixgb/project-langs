@@ -19,14 +19,7 @@ import Control.Monad.Identity
 type TypeEnv = Map.Map String Type
 
 type Constraint = (Type, Type)
--- 
--- data NameState = NameState {
---       count :: Int
---     , env :: TypeEnv
---     }
---                             
--- type Infer a = (RWST TypeEnv [Constraint] NameState ThrowsError a)
--- 
+
 class Substitutable a where
     apply :: Subst -> a -> a
     freeTyVars :: a -> Set.Set Type
@@ -57,8 +50,9 @@ instance Substitutable Type where
     freeTyVars (TyFunc tys tyS2) = Set.unions $ (freeTyVars tyS2) : (fmap freeTyVars tys)
     freeTyVars (Forall tyVars t) = freeTyVars t `Set.difference` Set.fromList tyVars
     freeTyVars (TyTaggedUnion fts) = Set.unions $ map (freeTyVars . snd) fts
-
--- instance Substitutable Type where
+    freeTyVars (TyAbs param body) = freeTyVars body `Set.difference` freeTyVars param
+    freeTyVars (TyApp func param) = freeTyVars func `Set.union` freeTyVars param
+    freeTyVars err = error $ show err
 
 instance Substitutable a => Substitutable [a] where
     apply = map . apply
@@ -72,41 +66,9 @@ instance Substitutable Constraint where
     apply s (t1, t2) = (apply s t1, apply s t2)
     freeTyVars (t1, t2) = freeTyVars t1 `Set.union` freeTyVars t2
 
--- 
--- dataToEnv :: TypeEnv -> Expr -> TypeEnv
--- dataToEnv env expr = case expr of
---     (ETaggedUnion _ name ty) -> Map.union (Map.insert name ty env) $ case ty of
---         (TyTaggedUnion constrs) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
---         (TyRec name (TyTaggedUnion constrs)) -> Map.unions $ fmap (\x -> Map.insert x ty env) $ fmap fst constrs
---         _ -> Map.empty
---     (ESeq first second) -> Map.union (dte first) (dte second)
---         where dte = dataToEnv env
---     _ -> env
--- 
 names :: [String]
 names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
 
--- fresh :: Infer Type
--- fresh = do
---     s <- get
---     put s { count = count s + 1 }
---     return $ TyVar (names !! count s)
--- 
--- initNameState ::TypeEnv -> NameState
--- initNameState e = NameState { count = 0, env = e }
--- 
--- runInfer :: TypeEnv -> Infer Type -> ThrowsError (Type, [Constraint])
--- runInfer env m = evalRWST m env (initNameState env)
--- 
--- inferType :: Expr -> ThrowsError (Type, [Constraint])
--- inferType expr = runInfer Map.empty (recon expr)
---     --where dataEnv = dataToEnv Map.empty expr
--- 
--- infer :: Expr -> ThrowsError Scheme
--- infer ex = case inferExpr Map.empty ex of
---     Left err -> throwError err
---     Right ty -> return ty
--- 
 constraintsExpr :: Expr -> ThrowsError ([Constraint], Subst, Type, Type)
 constraintsExpr ex = do
     (ty, _, constrs) <- runMkConstr ex
@@ -114,14 +76,7 @@ constraintsExpr ex = do
     case runSolve constrs of
         Left err -> throwError err
         Right subst -> return $ (constrs, subst, ty, (closeOver $ apply subst ty))
--- 
--- inferExpr :: TypeEnv -> Expr -> Either LangErr Scheme
--- inferExpr env ex = case runExcept $ runInfer env (recon ex) of
---     Left err -> Left err
---     Right (ty, constrs) -> case runSolve constrs of
---         Left err -> Left err
---         Right subst -> Right $ closeOver $ apply subst ty
--- 
+
 closeOver :: Type -> Type
 closeOver = normalize . generalize Map.empty
 
@@ -133,15 +88,16 @@ normalize (Forall _ body) = Forall (map snd ord) (normtype body)
         fv (TyFunc as b) = (fv b) ++ (concatMap fv as)
         fv _ = []
         normtype (TyFunc as b) = TyFunc (map normtype as) (normtype b)
-        normtype (TyVar a) = case lookup a ord of
-            Just x -> TyVar a
-            Nothing -> error "ty var not in sig"
+        normtype (TyVar a) = (TyVar a) -- case lookup a ord of
+            -- Just x -> TyVar a
+            -- Nothing -> error $ a ++ " not in " ++ show ord
         normtype TyInt = TyInt
         normtype TyBool = TyBool
         normtype TyUnit = TyUnit
         normtype (TyTaggedUnion fields) = TyTaggedUnion fields
-        normtype (TyAbs param body) = body
-        normtype err = error $ show err
+        normtype (TyAbs param body) = (TyAbs param body)
+        normtype (TyApp func param) = TyApp (normtype func) (normtype param)
+        normtype err = error $ show "invalid form: " ++ show err
 
 type Unifier = (Subst, [Constraint])
 
@@ -163,10 +119,10 @@ unifyMany (t1 : ts1) (t2 : ts2) = do
     su1 <- unifies t1 t2
     su2 <- unifyMany (apply su1 ts1) (apply su1 ts2)
     return (su2 `compose` su1)
--- unifyMany t1 t2 = throwError $ ErrUnifyUnsolvable [] -- Fix lang error
 unifyMany t1 t2 = throwError $ ErrUnify t1 t2
 
--- Testing for type equivalence
+-- Value constuctors should take the correct number of arguments
+-- Testing for type equivalence, also evaluating type expressions
 unifies :: Type -> Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return mempty
 unifies (TyVar name) t = name `bind` t
@@ -178,8 +134,9 @@ unifies t1 (TyApp (TyAbs param body) actual) = unifies t1 (apply newSubst body)
     where newSubst = Subst $ Map.singleton param actual
 unifies (TyApp func1 param1) (TyApp func2 param2) 
     | func1 == func2 = unifies param1 param2
+unifies (TyTaggedUnion fts1) (TyTaggedUnion fts2) = unifyMany (concatMap snd fts1) (concatMap snd fts2)
+unifies (TyAbs param1 body1) (TyAbs param2 body2) = unifyMany [param1, body1] [param2, body2]
 unifies t1 t2 = throwError $ ErrUnify [t1] [t2]
--- unifies t1 t2 = throwError $ ErrUnify [t1] [t2]
 
 solver :: Unifier -> Solve Subst
 solver (su, constrs) = case constrs of
@@ -202,48 +159,7 @@ expand :: Type -> Type
 expand (TyApp (TyAbs param body) ty) = expand (apply newSubst body)
     where newSubst = Subst $ Map.singleton param ty
 expand ty = ty
--- 
--- instantiate :: Scheme -> Infer Type
--- instantiate (Forall xs ty) = do
---     names <- mapM (\_ -> fresh) xs
---     let s = Subst $ Map.fromList (zip xs names)
---     return $ apply s ty
--- 
-generalize :: TypeEnv -> Type -> Type
-generalize env t = Forall xs t
-    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env `Set.difference` (Set.fromList [])
-    -- where xs = error $ show $ freeTyVars t `Set.difference` freeTyVars env
--- 
--- insertIntoEnv :: String -> Scheme -> Infer ()
--- insertIntoEnv name ty = do
---     s <- get
---     let newEnv = Map.insert name ty (env s)
---     put s { env = newEnv }
---     return ()
--- 
--- lookupEnv :: String -> Infer Type
--- lookupEnv name = do
---     e <- fmap env get
---     case Map.lookup name e of
---         Just sc -> do
---             t <- instantiate sc
---             return t
---         Nothing -> throwError $ ErrTyVarNotFound name e
--- 
--- inEnv :: String -> Scheme -> Infer ()
--- inEnv name scheme = do
---     s <- get
---     let oldEnv = env s
---     let newEnv = Map.delete name oldEnv
---     insertIntoEnv name scheme
--- 
--- outEnv :: String -> Infer ()
--- outEnv name = do
---     s <- get
---     let oldEnv = env s
---     let newEnv = Map.delete name oldEnv
---     put s { env = newEnv }
--- 
+
 fresh' :: Constr Type
 fresh' = do
     s <- get
@@ -255,6 +171,10 @@ instantiate' (Forall xs ty) = do
     names <- mapM (\_ -> fresh') xs
     let s = Subst $ Map.fromList (zip xs names)
     return $ apply s ty
+
+generalize :: TypeEnv -> Type -> Type
+generalize env t = Forall xs t
+    where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
 
 lookupVar :: String -> TypeEnv -> Constr Type
 lookupVar name env = do
@@ -309,7 +229,7 @@ mkConstrs expr env constrs = case expr of
         t2 <- fresh'
         let tf = (TyFunc argTys t2)
         let env' = Map.insert name (Forall [] tf) env
-        let env'' = Map.unions $ zipWith (\n ty -> Map.insert n (Forall [] ty) env') args argTys
+        let env'' = Map.union env' $ Map.unions $ zipWith (\n ty -> Map.insert n (Forall [] ty) env') args argTys
         (tyBody, _, bodyContrs) <- mkConstrs body env'' constrs
         funcTy <- solveConstrs (bodyContrs ++ constrs) (TyFunc argTys tyBody)
         let funcTy' = generalize env funcTy
@@ -328,9 +248,18 @@ mkConstrs expr env constrs = case expr of
         (tyT1, env', constrs1) <- mkConstrs t1 env constrs
         mkConstrs t2 env' constrs1
 
+    -- generalise to all binary operations....
+    (EBinexp _ op t1 t2) -> do
+        (tyT1, env', constrs1) <- mkConstrs t1 env constrs
+        (tyT2, env'', constrs2) <- mkConstrs t2 env' constrs1
+        let newConstrs = (tyT2, TyInt) : (tyT1, TyInt) : constrs ++ constrs1 ++ constrs2
+        return (TyInt, env'', newConstrs)
+
     (ETag _ name exprs) -> do
         tyTagged <- lift $ lookupEnv name env
         tyExprs <- mapM (\e -> mkConstrs e env constrs) exprs
+        -- evaluate the types here, and return the result with the actual type
+        -- substituted
         let app = foldl TyApp tyTagged (map getFirst3 tyExprs)
         return (app, env, constrs)
 
@@ -339,19 +268,22 @@ mkConstrs expr env constrs = case expr of
         let env' = Map.insert name tyabs env
         case body of
             (TyTaggedUnion fields) -> do
-                let env'' = Map.unions $ map (\(n, _) -> Map.insert n tyabs env) fields
-                return (TyUnit, Map.union env' env'', constrs)
+                let env'' = Map.union env' $ Map.unions $ map (\(n, _) -> Map.insert n tyabs env) fields
+                return (TyUnit, env'', constrs)
             _ -> return (TyUnit, env', constrs)
 
-transTy :: TypeEnv -> Type -> ThrowsError Type
-transTy tyEnv ty = case ty of
-    
-    (TyVar name) -> do
-        ty <- lookupEnv name tyEnv
-        return ty
-    
+    (ECase _ expr branches) -> do
+        (tyExpr, env', constrs') <- mkConstrs expr env constrs
+        let (tag1, ex1) = head branches
+        case tag1 of
+            (ETag _ name exprs) -> do
+                newVars <- mapM (\_ -> fresh') exprs
+                let env'' = Map.union env' $ Map.fromList $ zip (map (\(EVar _ name) -> name) exprs) (map (Forall []) newVars)
+                (tyBranches, _, _) <- mkConstrs tag1 env'' constrs
+                let exprConstr = (tyExpr, tyBranches)
+                -- error $ show exprConstr
+                return (TyUnit, env', exprConstr : constrs')
 
--- 
 -- recon :: Expr -> Infer Type
 -- recon expr = case expr of
 --     (EVar _ name) -> lookupEnv name

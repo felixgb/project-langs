@@ -1,3 +1,11 @@
 type Either A B = {Left(A) | Right(B)}
 
-Left(true, 1)
+type Opt A = {Some(A) | Nothing()}
+
+def f(x) {
+    case x of {
+        Left(y) -> y;
+    }
+}
+
+Left(true)

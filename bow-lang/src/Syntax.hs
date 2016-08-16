@@ -95,6 +95,6 @@ instance Show LangErr where
     show (ErrCircularUnify name ty) = "Circular constraints, var: " ++ name ++ " found in " ++ (show ty)
     show (ErrUnifyUnsolvable tys) = "Unable to unify types: " ++ (show tys)
     show (ErrIndexOutOfBounds idx name) = "Index out of bounds: " ++ (show idx) ++ ", " ++ name
-    show (ErrUnify t1s t2s) = "Unable to unify types: " ++ (show t1s) ++ (show t2s)
+    show (ErrUnify t1s t2s) = "Unable to unify types: \n" ++ (show t1s) ++ "\n" ++ (show t2s)
 
 type ThrowsError = Except LangErr 
