@@ -71,11 +71,11 @@ names = zipWith (\c n -> c ++ (show n)) (repeat "a") (iterate (+1) 1)
 
 constraintsExpr :: Expr -> ThrowsError ([Constraint], Subst, Type, Type)
 constraintsExpr ex = do
-    (ty, _, constrs) <- runMkConstr ex
+    ((ty, _), (InferState _ cs)) <- runMkConstr ex
     -- (ty, constrs) <- runInfer Map.empty (recon ex)
-    case runSolve constrs of
+    case runSolve cs of
         Left err -> throwError err
-        Right subst -> return $ (constrs, subst, ty, (closeOver $ apply subst ty))
+        Right subst -> return $ (cs, subst, ty, (closeOver $ apply subst ty))
 
 closeOver :: Type -> Type
 closeOver = normalize . generalize Map.empty
@@ -154,21 +154,40 @@ bind a t
 occursCheck :: Substitutable a => String -> a -> Bool
 occursCheck a t = (TyVar a) `Set.member` freeTyVars t
 
--- Expand a type to check internal structure
-expand :: Type -> Type
-expand (TyApp (TyAbs param body) ty) = expand (apply newSubst body)
-    where newSubst = Subst $ Map.singleton param ty
-expand ty = ty
+data InferState = InferState {
+      nameIndex :: Int
+    , constraints :: [Constraint]
+}
 
-fresh' :: Constr Type
-fresh' = do
+type Infer a = StateT InferState ThrowsError a
+
+initInfer :: InferState
+initInfer = InferState { nameIndex = 0, constraints = [] }
+
+type KindEnv = Map.Map String Kind
+ 
+kindOf :: Type -> KindEnv -> Infer (Kind, KindEnv)
+kindOf ty env = case ty of
+
+    (TyVar name) -> do
+        ty <- lift $ lookupEnv name env
+        return (ty, env)
+     
+    -- (TyAbs (TyVar name) body) -> do
+    --     paramTy <- fresh
+    --     let env' = Map.insert name fresh
+    --     bodyTy <- infer env
+        
+
+fresh :: Infer Type
+fresh = do
     s <- get
-    put s { index = index s + 1 }
-    return $ TyVar (names !! index s)
+    put s { nameIndex = nameIndex s + 1 }
+    return $ TyVar (names !! nameIndex s)
 
-instantiate' :: Type -> Constr Type
-instantiate' (Forall xs ty) = do
-    names <- mapM (\_ -> fresh') xs
+instantiate :: Type -> Infer Type
+instantiate (Forall xs ty) = do
+    names <- mapM (\_ -> fresh) xs
     let s = Subst $ Map.fromList (zip xs names)
     return $ apply s ty
 
@@ -176,92 +195,86 @@ generalize :: TypeEnv -> Type -> Type
 generalize env t = Forall xs t
     where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
 
-lookupVar :: String -> TypeEnv -> Constr Type
+lookupVar :: String -> TypeEnv -> Infer Type
 lookupVar name env = do
     sc <- lift $ lookupEnv name env
-    t <- instantiate' sc
+    t <- instantiate sc
     return t
 
-lookupEnv :: String -> TypeEnv -> ThrowsError Type
+lookupEnv :: String -> Map.Map String a -> ThrowsError a
 lookupEnv name env = case Map.lookup name env of
     Just sc -> return sc
-    Nothing -> throwError $ ErrTyVarNotFound name env
+    Nothing -> throwError $ ErrTyVarNotFound name
 
-solveConstrs :: [Constraint] -> Type -> Constr Type
+solveConstrs :: [Constraint] -> Type -> Infer Type
 solveConstrs constrs ty = case runSolve constrs  of
     Left err -> throwError err
     Right s -> return $ apply s ty
 
-data NamesSupply = NamesSupply {
-    index :: Int
-}
+runMkConstr :: Expr -> ThrowsError ((Type, TypeEnv), InferState)
+runMkConstr ex = runStateT (mkConstrs ex Map.empty) initInfer
 
-initSupply :: NamesSupply
-initSupply = NamesSupply { index = 0 }
+addConstr :: Constraint -> Infer ()
+addConstr c = do
+    is <- get
+    put is { constraints = c : (constraints is) }
 
-type Constr a = StateT NamesSupply ThrowsError a 
+getConstrs :: Infer [Constraint]
+getConstrs = fmap constraints get
 
-runMkConstr :: Expr -> ThrowsError (Type, TypeEnv, [Constraint])
-runMkConstr ex = evalStateT (mkConstrs ex Map.empty []) initSupply
-
-getFirst3 :: (a, b, c) -> a
-getFirst3 (a, b, c) = a
-
-getThird3 :: (a, b, c) -> c
-getThird3 (a, b, c) = c
-
-mkConstrs :: Expr -> TypeEnv -> [Constraint] -> Constr (Type, TypeEnv, [Constraint])
-mkConstrs expr env constrs = case expr of
+mkConstrs :: Expr -> TypeEnv -> Infer (Type, TypeEnv)
+mkConstrs expr env = case expr of
 
     (EVar _ name) -> do
         instanciated <- lookupVar name env
-        return (instanciated, env, constrs)
+        return (instanciated, env)
 
-    (ELit _ (LInt _)) -> return (TyInt, env, constrs)
+    (ELit _ (LInt _)) -> return (TyInt, env)
 
-    (ELit _ (LBool _)) -> return (TyBool, env, constrs)
+    (ELit _ (LBool _)) -> return (TyBool, env)
 
     (EUnit _) -> do
         error $ show env
 
     (EDef _ name args body) -> do
-        argTys <- mapM (\_ -> fresh') args
-        t2 <- fresh'
+        argTys <- mapM (\_ -> fresh) args
+        t2 <- fresh
         let tf = (TyFunc argTys t2)
         let env' = Map.insert name (Forall [] tf) env
         let env'' = Map.union env' $ Map.unions $ zipWith (\n ty -> Map.insert n (Forall [] ty) env') args argTys
-        (tyBody, _, bodyContrs) <- mkConstrs body env'' constrs
-        funcTy <- solveConstrs (bodyContrs ++ constrs) (TyFunc argTys tyBody)
+        (tyBody, _) <- mkConstrs body env''
+        cs <- getConstrs
+        funcTy <- solveConstrs cs (TyFunc argTys tyBody)
         let funcTy' = generalize env funcTy
         let env''' = Map.insert name funcTy' env
-        return ((TyFunc argTys tyBody), env''', bodyContrs ++ constrs)
+        return ((TyFunc argTys tyBody), env''')
 
     (EInvoke _ name argExprs) -> do
-        argResults <- mapM (\ex -> mkConstrs ex env constrs) argExprs
-        let argExprTys = map getFirst3 argResults
-        let argConstrs = concatMap getThird3 argResults
+        argResults <- mapM (\ex -> mkConstrs ex env) argExprs
+        let argExprTys = map fst argResults
         func <- lookupVar name env
-        newVar <- fresh'
-        return (newVar, env, (func, TyFunc argExprTys newVar) : constrs ++ argConstrs)
+        newVar <- fresh
+        addConstr (func, TyFunc argExprTys newVar)
+        return (newVar, env)
 
     (ESeq t1 t2) -> do
-        (tyT1, env', constrs1) <- mkConstrs t1 env constrs
-        mkConstrs t2 env' constrs1
+        (tyT1, env') <- mkConstrs t1 env 
+        mkConstrs t2 env'
 
     -- generalise to all binary operations....
     (EBinexp _ op t1 t2) -> do
-        (tyT1, env', constrs1) <- mkConstrs t1 env constrs
-        (tyT2, env'', constrs2) <- mkConstrs t2 env' constrs1
-        let newConstrs = (tyT2, TyInt) : (tyT1, TyInt) : constrs ++ constrs1 ++ constrs2
-        return (TyInt, env'', newConstrs)
+        (tyT1, env') <- mkConstrs t1 env 
+        (tyT2, env'') <- mkConstrs t2 env'
+        mapM_ addConstr $ [(tyT2, TyInt), (tyT1, TyInt)]
+        return (TyInt, env'')
 
     (ETag _ name exprs) -> do
         tyTagged <- lift $ lookupEnv name env
-        tyExprs <- mapM (\e -> mkConstrs e env constrs) exprs
+        tyExprs <- mapM (\e -> mkConstrs e env) exprs
         -- evaluate the types here, and return the result with the actual type
         -- substituted, as much as possible
-        let app = foldl TyApp tyTagged (map getFirst3 tyExprs)
-        return (app, env, constrs)
+        let app = foldl TyApp tyTagged (map fst tyExprs)
+        return (app, env)
 
     (ETyDef name params body) -> do
         let tyabs = foldr TyAbs body params
@@ -269,24 +282,24 @@ mkConstrs expr env constrs = case expr of
         case body of
             (TyTaggedUnion fields) -> do
                 let env'' = Map.union env' $ Map.unions $ map (\(n, _) -> Map.insert n tyabs env) fields
-                return (TyUnit, env'', constrs)
-            _ -> return (TyUnit, env', constrs)
+                return (TyUnit, env'')
+            _ -> return (TyUnit, env')
 
     (ECase _ expr branches) -> do
-        (tyExpr, env', constrs') <- mkConstrs expr env constrs
+        (tyExpr, env') <- mkConstrs expr env
         let (tag1, ex1) = head branches
         case tag1 of
             (ETag _ name exprs) -> do
-                newVars <- mapM (\_ -> fresh') exprs
+                newVars <- mapM (\_ -> fresh) exprs
                 let env'' = Map.union env' $ Map.fromList $ zip (map (\(EVar _ name) -> name) exprs) (map (Forall []) newVars)
                 -- can't evaluate braches as tags, cause they don't unify...
                 -- Fixing the evaluation of Tag would fix this
-                (tyBranches, _, _) <- mkConstrs tag1 env'' constrs
-                let exprConstr = (tyExpr, tyBranches)
-                (tyEx, env''', constrs'') <- mkConstrs ex1 env'' constrs'
+                (tyBranches, _) <- mkConstrs tag1 env''
+                addConstr (tyExpr, tyBranches)
+                (tyEx, env''') <- mkConstrs ex1 env''
                 -- need unify all branches!
                 -- error $ show exprConstr
-                return (tyEx, env''', exprConstr : constrs'')
+                return (tyEx, env''')
 
 -- recon :: Expr -> Infer Type
 -- recon expr = case expr of

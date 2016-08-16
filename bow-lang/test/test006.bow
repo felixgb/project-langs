@@ -9,4 +9,14 @@ def f(x) {
     }
 }
 
-f(Nothing())
+def g(x) {
+    case x of {
+        Left(y) -> y;
+        Right(y) -> y;
+    }
+}
+
+g(Left(1))
+g(Left(true))
+
+// f(Nothing())

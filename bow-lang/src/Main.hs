@@ -50,7 +50,6 @@ ppList :: Show a => [a] -> IO ()
 ppList li = mapM_ (putStrLn . show) li
 
 ppErr :: LangErr -> IO ()
-ppErr (ErrTyVarNotFound var env) = do
-    putStrLn $ "Can't find type variable: " ++ var ++ ", env: "
-    ppList $ Map.assocs env
+ppErr (ErrTyVarNotFound var) = do
+    putStrLn $ "Can't find type variable: " ++ var
 ppErr err = putStrLn $ show err

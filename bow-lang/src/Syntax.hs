@@ -78,7 +78,7 @@ data LangErr
     | ErrFieldMismatch
     | ErrNotInVariantFields String
     | ErrVarNotFound String
-    | ErrTyVarNotFound String (Map.Map String Type)
+    | ErrTyVarNotFound String
     | ErrCircularUnify String Type
     | ErrUnifyUnsolvable [(Type, Type)]
     | ErrIndexOutOfBounds Int String
@@ -91,7 +91,7 @@ instance Show LangErr where
     show (ErrFieldMismatch) = "field mismatch"
     show (ErrNotInVariantFields msg) = "Not in union fields: " ++ msg
     show (ErrVarNotFound var ) = "Can't find variable: " ++ var
-    show (ErrTyVarNotFound var env) = "Can't find type variable: " ++ var ++ ", env: " ++ (show env)
+    show (ErrTyVarNotFound var) = "Can't find type variable: " ++ var
     show (ErrCircularUnify name ty) = "Circular constraints, var: " ++ name ++ " found in " ++ (show ty)
     show (ErrUnifyUnsolvable tys) = "Unable to unify types: " ++ (show tys)
     show (ErrIndexOutOfBounds idx name) = "Index out of bounds: " ++ (show idx) ++ ", " ++ name
