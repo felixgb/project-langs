@@ -194,6 +194,7 @@ kindOf ty env = case ty of
     TyInt -> return (KStar, env)
     TyBool -> return (KStar, env)
     TyUnit -> return (KStar, env)
+    TyFunc{} -> return (KStar, env)
 
     (TyVar name) -> do
         ty <- lift $ lookupEnv name env
@@ -216,6 +217,45 @@ kindOf ty env = case ty of
         forM branches (\(_, tys) -> do
             mapM (\t -> kindOf t env) tys)
         return (KStar, env)
+
+    err -> error $ show err
+
+getBody :: Type -> Type
+getBody (TyAbs param body) = getBody body
+getBody other = other
+
+evalType :: Type -> TypeEnv -> ThrowsError (Type, TypeEnv)
+evalType ty env = case ty of
+    
+    TyInt -> return (TyInt, env)
+    TyBool -> return (TyBool, env)
+    TyUnit -> return (TyUnit, env)
+
+    (TyVar name) -> if length name < 1
+        then do
+            v <- lookupEnv name env
+            return (v, env)
+        else return (TyVar name, env)
+
+    (TyAbs param body) -> return (TyAbs param (apply se body), env)
+        -- not so sure about this, needs a better evaluation
+        where se = Subst $ Map.mapKeys TyVar env
+
+    (TyApp fun arg) -> do
+        ((TyAbs (TyVar x) body), clo) <- evalType fun env
+        (argv, _) <- evalType arg env
+        let env' = Map.insert x argv clo
+        evalType body env'
+
+    (TyTaggedUnion branches) -> do
+        newBraches <- mapM (\(name, tys) -> do
+            tys' <- mapM et tys
+            return (name, tys')) branches
+        return (TyTaggedUnion newBraches, env)
+        where
+            et ty = do
+                (ty', _) <- evalType ty env
+                return ty'
 
 type KindConstr = (Kind, Kind)
 
@@ -369,7 +409,9 @@ mkConstrs expr env = case expr of
         -- evaluate the types here, and return the result with the actual type
         -- substituted, as much as possible
         let app = foldl TyApp tyTagged (map fst tyExprs)
-        return (app, env)
+        error $ show app
+        (evaled, _) <- lift $ evalType app env
+        return (getBody evaled, env)
 
     (ETyDef name params body) -> do
         let tyabs = foldr TyAbs body params

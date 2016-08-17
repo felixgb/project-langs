@@ -1,16 +1,15 @@
 type Either A B = {Left(A) | Right(B)}
 
-type Lol = Int
+type Opt A = {Some(A) | Nothing()}
 
-// type Opt A = {Some(A) | Nothing()}
+//
+//def f(x) {
+//    Some(x)
+//}
+//
 
-// 
-// def f(x) {
-//     case x of {
-//         Some(y) -> y;
-//         Nothing() -> false;
-//     }
-// }
+Some(1)
+
 // 
 // def g(x) {
 //     case x of {
@@ -19,7 +18,3 @@ type Lol = Int
 //     }
 // }
 // 
-// g(Left(1))
-// g(Left(true))
-// 
-// f(Nothing())
