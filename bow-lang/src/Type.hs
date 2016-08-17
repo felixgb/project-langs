@@ -99,8 +99,6 @@ normalize (Forall _ body) = Forall (map snd ord) (normtype body)
         normtype (TyApp func param) = TyApp (normtype func) (normtype param)
         normtype err = error $ show "invalid form: " ++ show err
 
-type Unifier = (Subst, [Constraint])
-
 type Solve a = ExceptT LangErr Identity a
 
 newtype Subst = Subst (Map.Map Type Type)
@@ -138,6 +136,8 @@ unifies (TyTaggedUnion fts1) (TyTaggedUnion fts2) = unifyMany (concatMap snd fts
 unifies (TyAbs param1 body1) (TyAbs param2 body2) = unifyMany [param1, body1] [param2, body2]
 unifies t1 t2 = throwError $ ErrUnify [t1] [t2]
 
+type Unifier = (Subst, [Constraint])
+
 solver :: Unifier -> Solve Subst
 solver (su, constrs) = case constrs of
     [] -> return su
@@ -154,38 +154,133 @@ bind a t
 occursCheck :: Substitutable a => String -> a -> Bool
 occursCheck a t = (TyVar a) `Set.member` freeTyVars t
 
-data InferState = InferState {
+data InferState a = InferState {
       nameIndex :: Int
-    , constraints :: [Constraint]
-}
+    , constraints :: [(a, a)]
+} deriving (Show)
 
-type Infer a = StateT InferState ThrowsError a
+type Infer a b = StateT (InferState b) ThrowsError a
 
-initInfer :: InferState
+initInfer :: InferState a
 initInfer = InferState { nameIndex = 0, constraints = [] }
 
 type KindEnv = Map.Map String Kind
- 
-kindOf :: Type -> KindEnv -> Infer (Kind, KindEnv)
+
+runKindOf :: Type -> ThrowsError ((Kind, KindEnv), (InferState Kind))
+runKindOf ty = runStateT (kindOf ty Map.empty) initInfer
+
+constraintsTy :: Type -> ThrowsError ([KindConstr], KSubst, Kind, Kind)
+constraintsTy (Forall _ ty) = do
+    ((ty, _), (InferState _ cs)) <- runKindOf ty
+    -- (ty, constrs) <- runInfer Map.empty (recon ex)
+    case runKSolve cs of
+        Left err -> throwError err
+        Right subst -> return $ (cs, subst, ty, (replaceKVars $ kapply subst ty))
+
+replaceKVars :: Kind -> Kind
+replaceKVars (KVar _) = KStar
+replaceKVars (KArr k1 k2) = KArr (replaceKVars k1) (replaceKVars k2)
+replaceKVars KStar = KStar
+
+freshKVar :: Infer Kind Kind
+freshKVar = do
+    s <- get
+    put s { nameIndex = nameIndex s + 1 }
+    return $ KVar (names !! nameIndex s)
+
+kindOf :: Type -> KindEnv -> Infer (Kind, KindEnv) Kind
 kindOf ty env = case ty of
+
+    TyInt -> return (KStar, env)
+    TyBool -> return (KStar, env)
+    TyUnit -> return (KStar, env)
 
     (TyVar name) -> do
         ty <- lift $ lookupEnv name env
         return (ty, env)
-     
-    -- (TyAbs (TyVar name) body) -> do
-    --     paramTy <- fresh
-    --     let env' = Map.insert name fresh
-    --     bodyTy <- infer env
-        
 
-fresh :: Infer Type
+    (TyAbs (TyVar name) body) -> do
+        kv <- freshKVar
+        let env' = Map.insert name kv env
+        (bodyTy, env'') <- kindOf body env'
+        return (KArr kv bodyTy, env)
+
+    (TyApp func param) -> do
+        (funcTy, env') <- kindOf func env
+        (paramTy, env') <- kindOf param env
+        kv <- freshKVar
+        addConstr (funcTy, KArr paramTy kv)
+        return (kv, env)
+
+    (TyTaggedUnion branches) -> do
+        forM branches (\(_, tys) -> do
+            mapM (\t -> kindOf t env) tys)
+        return (KStar, env)
+
+type KindConstr = (Kind, Kind)
+
+type KindUnifier = (KSubst, [KindConstr])
+
+type KindSolve a = ExceptT LangErr Identity a
+
+newtype KSubst = KSubst (Map.Map Kind Kind)
+    deriving (Eq, Ord, Show, Monoid)
+
+class KSubstitutable a where
+    kapply :: KSubst -> a -> a
+
+instance KSubstitutable Kind where
+    kapply _ KStar = KStar
+    kapply (KSubst s) t@(KVar a) = Map.findWithDefault t t s
+    kapply s (KArr k1 k2) = KArr (kapply s k1) (kapply s k2)
+
+instance KSubstitutable a => KSubstitutable [a] where
+    kapply = map . kapply
+
+instance KSubstitutable KindConstr where
+    kapply s (k1, k2) = (kapply s k1, kapply s k2)
+
+runKSolve :: [KindConstr] -> Either LangErr KSubst
+runKSolve cs = runIdentity $ runExceptT $ kSolver st
+    where st = (mempty, cs)
+
+kSolver :: KindUnifier -> KindSolve KSubst
+kSolver (su, cs) = case cs of
+    [] -> return su
+    ((k1, k2) : cs0) -> do
+        su1 <- kindUnifies k1 k2
+        kSolver (su1 `kcompose` su, (kapply su1 cs0))
+
+kcompose :: KSubst -> KSubst -> KSubst
+kcompose (KSubst s1) (KSubst s2) = KSubst $ Map.map (kapply (KSubst s1)) s2 `Map.union` s1
+
+kindUnifyMany :: [Kind] -> [Kind] -> KindSolve KSubst
+kindUnifyMany [] [] = return mempty
+kindUnifyMany (k1 : ks1) (k2 : ks2) = do
+    su1 <- kindUnifies k1 k2
+    su2 <- kindUnifyMany (kapply su1 ks1) (kapply su1 ks2)
+    return (su2 `kcompose` su1)
+kindUnifyMany k1 k2 = error "kind unification failed"
+
+kindUnifies :: Kind -> Kind -> KindSolve KSubst
+kindUnifies k1 k2 | k1 == k2 = return mempty
+kindUnifies k@(KVar name) t = k `kBind` t
+kindUnifies t k@(KVar name) = k `kBind` t
+kindUnifies (KArr k1 k2) (KArr k3 k4) = kindUnifyMany [k1, k2] [k3, k4]
+kindUnifies k1 k2 = error "kind inference failed"
+
+kBind :: Kind -> Kind -> KindSolve KSubst
+kBind a t
+    | t == a = return mempty
+    | otherwise = return $ (KSubst $ Map.singleton a t)
+
+fresh :: Infer Type Type
 fresh = do
     s <- get
     put s { nameIndex = nameIndex s + 1 }
     return $ TyVar (names !! nameIndex s)
 
-instantiate :: Type -> Infer Type
+instantiate :: Type -> Infer Type Type
 instantiate (Forall xs ty) = do
     names <- mapM (\_ -> fresh) xs
     let s = Subst $ Map.fromList (zip xs names)
@@ -195,7 +290,7 @@ generalize :: TypeEnv -> Type -> Type
 generalize env t = Forall xs t
     where xs = Set.toList $ freeTyVars t `Set.difference` freeTyVars env
 
-lookupVar :: String -> TypeEnv -> Infer Type
+lookupVar :: String -> TypeEnv -> Infer Type Type
 lookupVar name env = do
     sc <- lift $ lookupEnv name env
     t <- instantiate sc
@@ -206,23 +301,23 @@ lookupEnv name env = case Map.lookup name env of
     Just sc -> return sc
     Nothing -> throwError $ ErrTyVarNotFound name
 
-solveConstrs :: [Constraint] -> Type -> Infer Type
+solveConstrs :: [Constraint] -> Type -> Infer Type Type
 solveConstrs constrs ty = case runSolve constrs  of
     Left err -> throwError err
     Right s -> return $ apply s ty
 
-runMkConstr :: Expr -> ThrowsError ((Type, TypeEnv), InferState)
+runMkConstr :: Expr -> ThrowsError ((Type, TypeEnv), (InferState Type))
 runMkConstr ex = runStateT (mkConstrs ex Map.empty) initInfer
 
-addConstr :: Constraint -> Infer ()
+addConstr :: (a, a) -> Infer () a
 addConstr c = do
     is <- get
     put is { constraints = c : (constraints is) }
 
-getConstrs :: Infer [Constraint]
+getConstrs :: Infer [(a, a)] a
 getConstrs = fmap constraints get
 
-mkConstrs :: Expr -> TypeEnv -> Infer (Type, TypeEnv)
+mkConstrs :: Expr -> TypeEnv -> Infer (Type, TypeEnv) Type
 mkConstrs expr env = case expr of
 
     (EVar _ name) -> do
@@ -282,8 +377,8 @@ mkConstrs expr env = case expr of
         case body of
             (TyTaggedUnion fields) -> do
                 let env'' = Map.union env' $ Map.unions $ map (\(n, _) -> Map.insert n tyabs env) fields
-                return (TyUnit, env'')
-            _ -> return (TyUnit, env')
+                return (tyabs, env'')
+            _ -> return (tyabs, env')
 
     (ECase _ expr branches) -> do
         (tyExpr, env') <- mkConstrs expr env

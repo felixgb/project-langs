@@ -34,6 +34,10 @@ printConstr (cs, (Subst s), ty, sc) = do
     putStrLn (show ty)
     putStrLn "Scheme:"
     putStrLn (show sc)
+    putStrLn "Kind:"
+    case runExcept $ constraintsTy sc of
+        Right (kcs, ks, kv, k) -> putStrLn (show kcs) >> putStrLn (show kv) >> putStrLn (show k)
+        Left err -> putStrLn (show err)
 
 foo inp = case runExcept $ process inp of
     Right val -> putStrLn (show val)

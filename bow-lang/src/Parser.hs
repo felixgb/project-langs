@@ -122,6 +122,8 @@ parseTyRecord = do
 parseType = try parseTyRecord
     <|> try parseTyUnion
     <|> parseTyUnit
+    <|> parseTyInt
+    <|> parseTyBool
     <|> parseTyVar
     <|> parens parseTyApp
 

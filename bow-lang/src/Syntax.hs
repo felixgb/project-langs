@@ -52,6 +52,7 @@ data Type
 
 data Kind 
     = KStar
+    | KVar String       -- Used for inference only
     | KArr Kind Kind
     deriving (Show, Eq, Ord)
 
