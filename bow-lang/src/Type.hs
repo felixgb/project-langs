@@ -231,15 +231,14 @@ evalType ty env = case ty of
     TyBool -> return (TyBool, env)
     TyUnit -> return (TyUnit, env)
 
+    -- Fix ty vars...
     (TyVar name) -> if length name < 1
         then do
             v <- lookupEnv name env
             return (v, env)
         else return (TyVar name, env)
 
-    (TyAbs param body) -> return (TyAbs param (apply se body), env)
-        -- not so sure about this, needs a better evaluation
-        where se = Subst $ Map.mapKeys TyVar env
+    (TyAbs param body) -> return (TyAbs param body, env)
 
     (TyApp fun arg) -> do
         ((TyAbs (TyVar x) body), clo) <- evalType fun env
@@ -408,10 +407,11 @@ mkConstrs expr env = case expr of
         tyExprs <- mapM (\e -> mkConstrs e env) exprs
         -- evaluate the types here, and return the result with the actual type
         -- substituted, as much as possible
+        -- Fix this. Folding an application is not the right answer here
         let app = foldl TyApp tyTagged (map fst tyExprs)
-        error $ show app
-        (evaled, _) <- lift $ evalType app env
-        return (getBody evaled, env)
+        (evaled, e) <- lift $ evalType app env
+        let evaled' = apply (Subst $ Map.mapKeys TyVar e) evaled
+        return (getBody evaled', env)
 
     (ETyDef name params body) -> do
         let tyabs = foldr TyAbs body params

@@ -2,13 +2,21 @@ type Either A B = {Left(A) | Right(B)}
 
 type Opt A = {Some(A) | Nothing()}
 
+def g(y) {
+    y
+}
+
+def f(x) {
+    g(x)
+}
+
 //
 //def f(x) {
 //    Some(x)
 //}
 //
 
-Some(1)
+//Left(1)
 
 // 
 // def g(x) {
