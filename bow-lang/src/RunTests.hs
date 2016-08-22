@@ -1,67 +1,44 @@
-import Text.Parsec
-import Text.Parsec.Language
-import Text.Parsec.String
-
-import qualified Text.Parsec.Expr as Ex
-import qualified Text.Parsec.Token as Tok
-
-import Control.Monad.Except
-
+import Text.Read
 import System.Process
 
-import qualified Data.Text as T
+import Syntax
 
-data Test = Test { path :: String
-                 , result :: String
-                 } deriving (Eq, Show)
+fa polys ty = Forall polys ty
+int = TyInt
+bool = TyBool
+var name = TyVar name
+func ins out = TyFunc ins out
 
-lexer = Tok.makeTokenParser style
-    where
-        ops = [":"]
-        names = ["result", "path"]
-        style = emptyDef {
-            Tok.commentLine = "--"
-            , Tok.reservedOpNames = ops
-            , Tok.reservedNames = names
-            }
+typeTestsResults :: [(Int, Type)]
+typeTestsResults =
+    [ (0, fa [] int)
+    , (1, fa [] $ func [] int)
+    , (2, fa [] $ func [int] int)
+    , (3, fa [] int)
+    , (4, fa [] bool)
+    , (5, fa [] int)
+    , (6, fa [] int)
+    , (7, fa [] int)
+    , (8, fa [var "a1"] $ func [var "a1"] (var "a1"))
+    , (9, fa [] $ func [int] (func [int] int))
+    , (10, fa [] int)
+    , (11, fa [] int)
+    , (12, fa [] bool)
+    , (13, fa [var "a1"] $ func [] (func [var "a1"] (var "a1")))
+    , (14, fa [] $ func [] int)
+    , (15, fa [] $ func [] int)
+    ]
 
-reservedOp = Tok.reservedOp lexer
+runTypeTest :: (Int, Type) -> IO ()
+runTypeTest (num, expectedRes) = do
+    let testPath = "../tests/test" ++ (show num) ++ ".bow"
+    res <- readProcess "../dist/build/bow-lang/bow-lang" ["--type", testPath] ""
+    putStrLn $ "Test number " ++ (show num) ++ ", : " ++ case readEither res of
+        Right ty -> getRes ty
+        Left err -> show err
+    where 
+        getRes r = if r == expectedRes
+            then "ok"
+            else "failed! \n\tExpected: \n\t" ++ (show expectedRes) ++ "\n\tbut got: \n\t" ++ (show r)
 
-reserved = Tok.reserved lexer
-
-line w = do
-    reserved w
-    reservedOp ":"
-    result <- many (noneOf "\n")
-    many (newline <|> comment)
-    return result
-
-parseCodeTest = do
-    result <- line "result"
-    path <- line "path"
-    return $ Test path result
-
-comment = do
-    reservedOp "--"
-    manyTill anyChar newline
-    return 'x'
-
-contents p = do
-    Tok.whiteSpace lexer
-    r <- p
-    eof
-    return r
-
-parseTests path = parseFromFile (contents $ many parseCodeTest) path
-
-runTest :: String -> IO String
-runTest path = readProcess "runhaskell" ["Main.hs", path] ""
-
-strip = T.unpack . T.strip . T.pack
-
-main = do
-    res <- parseTests "../test/test_results.txt"
-    case res of
-        Right tests -> do
-            out <- mapM (\test -> runTest $ "../test/" ++ (path test)) tests
-            mapM_ putStrLn out
+main = mapM_ runTypeTest typeTestsResults

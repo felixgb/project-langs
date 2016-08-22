@@ -2,58 +2,43 @@ module Main where
 
 import Control.Monad.Except
 
-import System.Environment
-
+import Data.List
 import qualified Data.Map.Strict as Map
+
+import System.Environment
 
 import Syntax
 import Parser
 import Eval
 import Type
 
-printEval :: Expr -> IO ()
-printEval inp = do
-    evaled <- evalExpr inp
-    case evaled of
-        (Right expr) -> return ()
-        (Left err) -> return ()
-
-process :: String -> ThrowsError ([Constraint], Subst, Type, Type)
-process inp = do
+--runType :: String -> ThrowsError 
+runType inp = do
     parsed <- parseTopLevel inp
     constraintsExpr parsed
-    -- evalExpr parsed
 
-printConstr :: ([Constraint], Subst, Type, Type) -> IO ()
-printConstr (cs, (Subst s), ty, sc) = do
-    putStrLn "Constraints:"
-    mapM_ (putStrLn . show) cs
-    putStrLn "Subst:"
-    mapM_ (putStrLn . show) (Map.assocs s)
-    putStrLn "Type:"
-    putStrLn (show ty)
-    putStrLn "Scheme:"
-    putStrLn (show sc)
-    putStrLn "Kind:"
-    case runExcept $ constraintsTy sc of
-        Right (kcs, ks, kv, k) -> putStrLn (show kcs) >> putStrLn (show kv) >> putStrLn (show k)
-        Left err -> putStrLn (show err)
+process :: Bool -> String -> (String -> ThrowsError ([(Type, Type)], Subst, Type, Type)) -> IO ()
+process isVerbose path func = do
+    source <- readFile path
+    case runExcept $ func source of
+        Left err -> putStrLn $ show err
+        Right (cs, sbs, pre, post) -> putStrLn $ if isVerbose 
+            then pretty (cs, sbs, pre, post) 
+            else show post
 
-foo inp = case runExcept $ process inp of
-    Right val -> putStrLn (show val)
-    Left err -> putStrLn (show err)
+pretty (cs, Subst sbs, pre, post) = "Constraints:\n" ++ csStr ++ "\nSubsts:\n" ++ sbsStr ++ "\nType:\n" ++ (show post)
+    where
+        csStr = intercalate "\n" $ map show cs
+        sbsStr = intercalate "\n" $ map show $ Map.toList sbs
+
+processEval :: String -> IO ()
+processEval inp = undefined
 
 main = do
-    path <- fmap head getArgs 
-    inp <- readFile path
-    case runExcept $ process inp of
-        Right val -> printConstr val
-        Left err -> (ppErr err)
-
-ppList :: Show a => [a] -> IO ()
-ppList li = mapM_ (putStrLn . show) li
-
-ppErr :: LangErr -> IO ()
-ppErr (ErrTyVarNotFound var) = do
-    putStrLn $ "Can't find type variable: " ++ var
-ppErr err = putStrLn $ show err
+    args <- getArgs
+    case args of
+        -- [] -> repl
+        ["--verbose", "--type", path] -> process True path runType
+        ["--type", path] -> process False path runType
+        ["--eval", path] -> process False path runType
+        other -> putStrLn $ "Unknown option: " ++ show other

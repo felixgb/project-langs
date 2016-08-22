@@ -1,0 +1,13 @@
+type Either A B =
+    { Left(A)
+    | Right(B)
+    }
+
+def f(a) {
+    case a of {
+        Right(y) -> y;
+        Left(x) -> x;
+    }
+}
+
+f(Left(1))

@@ -1,0 +1,2 @@
+cabal build
+./dist/build/bow-lang/bow-lang --verbose --type $1

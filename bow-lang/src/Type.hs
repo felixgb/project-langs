@@ -370,6 +370,11 @@ mkConstrs expr env = case expr of
     (EUnit _) -> do
         error $ show env
 
+    (EAssign _ name exp) -> do
+        (tyExp, env') <- mkConstrs exp env
+        let env'' = Map.insert name (generalize env' tyExp) env'
+        return (TyUnit, env'')
+
     (EDef _ name args body) -> do
         argTys <- mapM (\_ -> fresh) args
         t2 <- fresh
@@ -381,7 +386,7 @@ mkConstrs expr env = case expr of
         funcTy <- solveConstrs cs (TyFunc argTys tyBody)
         let funcTy' = generalize env funcTy
         let env''' = Map.insert name funcTy' env
-        return ((TyFunc argTys tyBody), env''')
+        return (funcTy, env''')
 
     (EInvoke _ name argExprs) -> do
         argResults <- mapM (\ex -> mkConstrs ex env) argExprs
@@ -405,10 +410,10 @@ mkConstrs expr env = case expr of
     (ETag _ name exprs) -> do
         tyTagged <- lift $ lookupEnv name env
         tyExprs <- mapM (\e -> mkConstrs e env) exprs
-        -- evaluate the types here, and return the result with the actual type
-        -- substituted, as much as possible
-        -- Fix this. Folding an application is not the right answer here
-        let app = foldl TyApp tyTagged (map fst tyExprs)
+        -- Unify type expressions with the constructor !!
+        let app = foldl TyApp tyTagged $ map fst tyExprs
+        error $ show $ tyTagged
+        -- error $ "APP: " ++ show app
         (evaled, e) <- lift $ evalType app env
         let evaled' = apply (Subst $ Map.mapKeys TyVar e) evaled
         return (getBody evaled', env)
@@ -418,9 +423,11 @@ mkConstrs expr env = case expr of
         let env' = Map.insert name tyabs env
         case body of
             (TyTaggedUnion fields) -> do
-                let env'' = Map.union env' $ Map.unions $ map (\(n, _) -> Map.insert n tyabs env) fields
-                return (tyabs, env'')
-            _ -> return (tyabs, env')
+                -- Rather than tyabs, get the variables that are free in each of the tagged union fields
+                let constrs = Map.fromList $ map (\(name, ty) -> (name, foldr TyAbs body (freeTyVars ty))) fields
+                let env'' = Map.union env' $ constrs
+                return (TyUnit, env'')
+            _ -> return (TyUnit, env')
 
     (ECase _ expr branches) -> do
         (tyExpr, env') <- mkConstrs expr env
@@ -435,7 +442,6 @@ mkConstrs expr env = case expr of
                 addConstr (tyExpr, tyBranches)
                 (tyEx, env''') <- mkConstrs ex1 env''
                 -- need unify all branches!
-                -- error $ show exprConstr
                 return (tyEx, env''')
 
 -- recon :: Expr -> Infer Type
@@ -460,7 +466,6 @@ mkConstrs expr env = case expr of
 -- 
 --     (EUnit _) -> do
 --         e <- fmap env get
---         error $ show e
 -- 
 --     (ETaggedUnion _ _ _) -> return TyUnit
 -- 
@@ -476,7 +481,6 @@ mkConstrs expr env = case expr of
 --         e <- fmap env get
 --         tell $ [(t2, tyBody)]
 --         tell $ [(tyBody, t2)]
---         -- error $ show $ 
 --         let funcTy' = generalize e $ TyFunc argTys tyBody -- Should be tf?
 --         -- let funcTy' = Forall [TyVar "a1"] $ TyFunc argTys tyBody -- Should be tf?
 --         inEnv name funcTy'

@@ -1,0 +1,5 @@
+type IntWrap = { Wrap(Int) }
+
+def f() {
+    let wrapped = Wrap(2)
+}

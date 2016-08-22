@@ -1,0 +1,9 @@
+type Either A B =
+    { Left(A)
+    | Right(B)
+    }
+
+case Left(1) of {
+    Left(x) -> x;
+    Right(y) -> y;
+}

@@ -1,0 +1,9 @@
+def f(g, x) {
+    g(x)
+}
+
+def h(x) {
+    x
+}
+
+f(h, 1)

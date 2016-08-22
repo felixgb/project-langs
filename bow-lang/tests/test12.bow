@@ -1,0 +1,7 @@
+def f(x) {
+    let y = x;
+    y
+}
+
+f(1)
+f(true)

@@ -1,0 +1,9 @@
+type Opt A =
+    { Some(A)
+    | Nothing()
+    }
+
+case Some(1) of {
+    Some(x) -> x;
+    Nothing() -> 666;
+}

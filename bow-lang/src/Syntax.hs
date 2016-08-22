@@ -45,7 +45,7 @@ data Type
     | TyApp Type Type             -- Operator Application
     | TyAbs Type Type        -- Operator Abstraction
     | Forall [Type] Type
-    deriving (Show, Eq, Ord)
+    deriving (Show, Read, Eq, Ord)
 
 -- data Scheme = Forall [Type] Type
 --     deriving (Show, Eq, Ord)
@@ -88,7 +88,7 @@ data LangErr
     | ErrExpectedKindArr
 
 instance Show LangErr where
-    show (ErrParse msg) = show msg
+    show (ErrParse msg) = msg
     show (ErrFieldMismatch) = "field mismatch"
     show (ErrNotInVariantFields msg) = "Not in union fields: " ++ msg
     show (ErrVarNotFound var ) = "Can't find variable: " ++ var

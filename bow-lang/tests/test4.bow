@@ -2,10 +2,9 @@ def f(g, x) {
     g(x)
 }
 
-def h(y) {
-    y
+def h(x) {
+    x
 }
 
+f(h, 1)
 f(h, true)
-
-h(2)

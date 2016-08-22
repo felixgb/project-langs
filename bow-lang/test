@@ -1,0 +1,3 @@
+cabal build
+cd src
+runhaskell RunTests.hs
