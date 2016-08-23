@@ -412,8 +412,6 @@ mkConstrs expr env = case expr of
         tyExprs <- mapM (\e -> mkConstrs e env) exprs
         -- Unify type expressions with the constructor !!
         let app = foldl TyApp tyTagged $ map fst tyExprs
-        error $ show $ tyTagged
-        -- error $ "APP: " ++ show app
         (evaled, e) <- lift $ evalType app env
         let evaled' = apply (Subst $ Map.mapKeys TyVar e) evaled
         return (getBody evaled', env)

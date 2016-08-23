@@ -119,12 +119,19 @@ parseTyRecord = do
             ty <- parseType
             return (name, ty)
 
+parseTyFunc = do
+    params <- parens $ commaSep parseType
+    reservedOp "->"
+    retTy <- parseType
+    return $ TyFunc params retTy
+
 parseType = try parseTyRecord
     <|> try parseTyUnion
     <|> parseTyUnit
     <|> parseTyInt
     <|> parseTyBool
     <|> parseTyVar
+    <|> try parseTyFunc
     <|> parens parseTyApp
 
 -- parseType = parseTyInt
@@ -135,6 +142,19 @@ parseType = try parseTyRecord
 --     <|> try parseTyVar
 -- 
 -- Parse Expressions
+
+parseTrait = do
+    reserved "class"
+    name <- consIdent
+    param <- parseTyVar
+    defs <- braces $ commaSep parseSig
+    return $ ETraitDef name param defs
+
+parseSig = do
+    name <- ident
+    reserved ":"
+    funcTy <- parseTyFunc
+    return $ ESig name funcTy
 
 parseTaggedUnion = do
     pos <- getPosition
@@ -292,6 +312,7 @@ parseBool = do
     return $ ELit (infoFrom pos) bool
 
 factor = try parseInt
+    <|> try parseTrait
     <|> try parseTyDec
     <|> try parseUnit
     <|> try parseString

@@ -26,7 +26,8 @@ typeTestsResults =
     , (12, fa [] bool)
     , (13, fa [var "a1"] $ func [] (func [var "a1"] (var "a1")))
     , (14, fa [] $ func [] int)
-    , (15, fa [] $ func [] int)
+    -- , (15, fa [] $ func [] int)
+    , (16, fa [] bool)
     ]
 
 runTypeTest :: (Int, Type) -> IO ()

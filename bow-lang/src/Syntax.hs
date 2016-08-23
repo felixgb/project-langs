@@ -26,6 +26,8 @@ data Expr
     | ETag Info String [Expr]
     | EVector Info (V.Vector Expr)
     | EIndex Info String Expr
+    | ETraitDef String Type [Expr]    -- Name params defs
+    | ESig String Type
     deriving (Show, Eq)
 
 -- builtins  Map.fromList [(print
